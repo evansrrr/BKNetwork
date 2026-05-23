@@ -1,0 +1,1541 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>BKNetwork</title>
+  <link rel="icon" type="image/svg+xml" href="favicon.svg" />
+  <style>
+    :root {
+      color-scheme: light dark;
+      --bg: #f3efe7;
+      --bg-elev: rgba(255,255,255,0.76);
+      --bg-soft: rgba(8,15,25,0.05);
+      --fg: #15181d;
+      --muted: #5f6877;
+      --line: rgba(16,24,40,0.12);
+      --line-strong: rgba(16,24,40,0.18);
+      --accent: #0f766e;
+      --accent-2: #2563eb;
+      --accent-3: #7c3aed;
+      --danger: #b42318;
+      --success: #15803d;
+      --warn: #b45309;
+      --shadow: 0 24px 60px rgba(15,23,42,0.10);
+    }
+
+    @media (prefers-color-scheme: dark) {
+      :root {
+        --bg: #07111c;
+        --bg-elev: rgba(10, 17, 28, 0.82);
+        --bg-soft: rgba(255,255,255,0.06);
+        --fg: #edf2f7;
+        --muted: #95a0b2;
+        --line: rgba(255,255,255,0.10);
+        --line-strong: rgba(255,255,255,0.16);
+        --accent: #2dd4bf;
+        --accent-2: #60a5fa;
+        --accent-3: #c084fc;
+        --danger: #f87171;
+        --success: #4ade80;
+        --warn: #f59e0b;
+        --shadow: 0 20px 50px rgba(0,0,0,0.40);
+      }
+    }
+
+    * { box-sizing: border-box; }
+    html, body { height: 100%; }
+    html {
+      scrollbar-width: none;
+      -ms-overflow-style: none;
+    }
+
+    html::-webkit-scrollbar,
+    body::-webkit-scrollbar {
+      width: 0;
+      height: 0;
+      display: none;
+    }
+
+    body {
+      margin: 0;
+      color: var(--fg);
+      font-family: "Segoe UI Variable", "Aptos", "PingFang SC", "Noto Sans SC", system-ui, sans-serif;
+      -webkit-font-smoothing: antialiased;
+      text-rendering: optimizeLegibility;
+      background:
+        radial-gradient(circle at 12% 8%, rgba(45,212,191,0.18), transparent 26%),
+        radial-gradient(circle at 88% 12%, rgba(96,165,250,0.18), transparent 24%),
+        radial-gradient(circle at 50% 100%, rgba(124,58,237,0.08), transparent 28%),
+        linear-gradient(180deg, var(--bg), color-mix(in srgb, var(--bg) 88%, #000 12%));
+      background-repeat: no-repeat;
+      background-size: 100% 100%;
+      background-attachment: fixed;
+      position: relative;
+      overflow-x: hidden;
+      overflow-y: auto;
+    }
+
+    body::before {
+      content: '';
+      position: fixed;
+      inset: 0;
+      pointer-events: none;
+      background:
+        radial-gradient(120% 70% at 0% 0%, rgba(255,255,255,0.08), transparent 60%),
+        radial-gradient(90% 80% at 100% 20%, color-mix(in srgb, var(--accent-2) 18%, transparent), transparent 68%),
+        linear-gradient(180deg, rgba(255,255,255,0.04), transparent 42%, rgba(0,0,0,0.08));
+      background-repeat: no-repeat;
+      background-size: cover;
+      opacity: 0.65;
+    }
+
+    .shell {
+      max-width: 1200px;
+      margin: 0 auto;
+      padding: 28px 18px 36px;
+      position: relative;
+      z-index: 1;
+    }
+
+    .hero {
+      display: grid;
+      grid-template-columns: 1.2fr 0.8fr;
+      gap: 16px;
+      align-items: stretch;
+      margin-bottom: 16px;
+    }
+
+    .panel {
+      background: var(--bg-elev);
+      border: 1px solid var(--line);
+      border-radius: 22px;
+      box-shadow: var(--shadow);
+      backdrop-filter: blur(18px);
+      overflow: clip;
+    }
+
+    .panel::after {
+      content: '';
+      display: block;
+      height: 1px;
+      background: linear-gradient(90deg, transparent, color-mix(in srgb, var(--accent) 35%, transparent), transparent);
+      opacity: 0.7;
+    }
+
+    .mode-switch {
+      position: fixed;
+      top: 18px;
+      right: 18px;
+      z-index: 20;
+      display: inline-flex;
+      align-items: center;
+      gap: 10px;
+      padding: 10px 14px;
+      border-radius: 999px;
+      border: 1px solid var(--line);
+      background: color-mix(in srgb, var(--bg-elev) 92%, #fff 8%);
+      box-shadow: var(--shadow);
+      backdrop-filter: blur(18px);
+      color: var(--fg);
+      font-size: 13px;
+    }
+
+    .github-fab {
+      position: fixed;
+      left: 18px;
+      bottom: 18px;
+      z-index: 20;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      width: 54px;
+      height: 54px;
+      border-radius: 18px;
+      border: 1px solid var(--line);
+      background: color-mix(in srgb, var(--bg-elev) 90%, #fff 10%);
+      box-shadow: var(--shadow);
+      backdrop-filter: blur(18px);
+      color: var(--fg);
+      text-decoration: none;
+      transition: transform 0.2s ease, border-color 0.2s ease, background 0.2s ease;
+    }
+
+    .github-fab:hover {
+      transform: translateY(-2px) scale(1.03);
+      border-color: color-mix(in srgb, var(--accent) 30%, var(--line-strong));
+    }
+
+    .github-fab:focus-visible {
+      outline: 2px solid color-mix(in srgb, var(--accent) 70%, white 30%);
+      outline-offset: 3px;
+    }
+
+    .github-fab img {
+      display: block;
+      width: 28px;
+      height: 28px;
+    }
+
+    .mode-switch .label {
+      color: var(--muted);
+      font-weight: 700;
+      letter-spacing: 0.04em;
+    }
+
+    .toggle {
+      position: relative;
+      display: inline-flex;
+      align-items: center;
+      cursor: pointer;
+      user-select: none;
+    }
+
+    .toggle input {
+      position: absolute;
+      inset: 0;
+      opacity: 0;
+      margin: 0;
+      cursor: pointer;
+    }
+
+    .toggle-track {
+      width: 52px;
+      height: 30px;
+      border-radius: 999px;
+      border: 1px solid var(--line-strong);
+      background: color-mix(in srgb, var(--bg-soft) 82%, transparent);
+      box-shadow: inset 0 1px 2px rgba(0,0,0,0.08);
+      position: relative;
+      transition: background 0.2s ease, border-color 0.2s ease;
+    }
+
+    .toggle-track::after {
+      content: '';
+      position: absolute;
+      top: 50%;
+      left: 3px;
+      width: 24px;
+      height: 24px;
+      border-radius: 50%;
+      transform: translateY(-50%);
+      background: linear-gradient(180deg, #fff, color-mix(in srgb, var(--bg) 82%, #fff 18%));
+      box-shadow: 0 4px 12px rgba(0,0,0,0.14);
+      transition: transform 0.2s ease;
+    }
+
+    .toggle input:checked + .toggle-track {
+      background: color-mix(in srgb, var(--accent) 34%, var(--bg-soft));
+      border-color: color-mix(in srgb, var(--accent) 55%, var(--line-strong));
+    }
+
+    .toggle input:checked + .toggle-track::after {
+      transform: translate(22px, -50%);
+    }
+
+    .advanced-only {
+      display: none;
+    }
+
+    body.advanced-mode .advanced-only {
+      display: block;
+    }
+
+    .easy-mode {
+      display: none;
+      margin-top: 16px;
+    }
+
+    body:not(.advanced-mode) .easy-mode {
+      display: block;
+    }
+
+    .easy-mode-card {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 16px;
+      padding: 16px 18px;
+      border-radius: 18px;
+      border: 1px solid var(--line);
+      background: linear-gradient(180deg, color-mix(in srgb, var(--bg-elev) 86%, #fff 14%), var(--bg-soft));
+      box-shadow: 0 12px 32px rgba(0,0,0,0.05);
+    }
+
+    .easy-mode-title {
+      font-size: 16px;
+      font-weight: 800;
+      margin-bottom: 4px;
+    }
+
+    .easy-mode-desc {
+      color: var(--muted);
+      font-size: 13px;
+      line-height: 1.5;
+    }
+
+    .easy-mode-state {
+      margin-top: 8px;
+      color: var(--accent);
+      font-size: 12px;
+      font-weight: 700;
+      letter-spacing: 0.04em;
+      text-transform: uppercase;
+    }
+
+    .hero-main {
+      padding: 26px;
+      min-height: 210px;
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+      position: relative;
+      isolation: isolate;
+    }
+
+    .hero-main::before {
+      content: '';
+      position: absolute;
+      inset: auto -40px -60px auto;
+      width: 220px;
+      height: 220px;
+      border-radius: 50%;
+      background: radial-gradient(circle, rgba(45,212,191,0.15), transparent 66%);
+      z-index: -1;
+    }
+
+    .eyebrow {
+      letter-spacing: 0.14em;
+      text-transform: uppercase;
+      font-size: 12px;
+      color: var(--accent);
+      font-weight: 800;
+    }
+
+    h1 {
+      margin: 8px 0 12px;
+      font-size: clamp(32px, 4vw, 56px);
+      line-height: 1.05;
+      letter-spacing: -0.04em;
+    }
+
+    .lead {
+      margin: 0;
+      color: var(--muted);
+      line-height: 1.6;
+      max-width: 72ch;
+      font-size: 15px;
+    }
+
+    .status-row {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+      margin-top: 20px;
+    }
+
+    .badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      padding: 9px 12px;
+      border: 1px solid var(--line);
+      border-radius: 999px;
+      background: linear-gradient(180deg, color-mix(in srgb, var(--bg-elev) 88%, #fff 12%), var(--bg-soft));
+      font-size: 13px;
+      box-shadow: 0 8px 24px rgba(0,0,0,0.04);
+    }
+
+    .dot {
+      width: 10px;
+      height: 10px;
+      border-radius: 50%;
+      background: var(--muted);
+      box-shadow: 0 0 0 6px color-mix(in srgb, var(--muted) 18%, transparent);
+    }
+
+    .dot.ok { background: var(--success); box-shadow: 0 0 0 6px color-mix(in srgb, var(--success) 18%, transparent); }
+    .dot.warn { background: #d97706; box-shadow: 0 0 0 6px color-mix(in srgb, #d97706 18%, transparent); }
+    .dot.err { background: var(--danger); box-shadow: 0 0 0 6px color-mix(in srgb, var(--danger) 18%, transparent); }
+
+    .hero-side {
+      padding: 18px;
+      display: grid;
+      gap: 12px;
+      grid-template-rows: auto auto 1fr;
+    }
+
+    .mini {
+      padding: 14px 16px;
+      border-radius: 18px;
+      border: 1px solid var(--line);
+      background: linear-gradient(180deg, color-mix(in srgb, var(--bg-elev) 85%, #fff 15%), transparent);
+      box-shadow: 0 10px 28px rgba(0,0,0,0.04);
+    }
+
+    .mini-link {
+      display: block;
+      color: inherit;
+      text-decoration: none;
+      transition: transform .18s ease, box-shadow .18s ease, border-color .18s ease;
+    }
+
+    .mini-link:hover {
+      transform: translateY(-1px);
+      border-color: var(--line-strong);
+      box-shadow: 0 14px 32px rgba(0,0,0,0.07);
+    }
+
+    .mini .label {
+      color: var(--muted);
+      font-size: 12px;
+      margin-bottom: 6px;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+    }
+
+    .mini .value {
+      font-size: 15px;
+      line-height: 1.5;
+      word-break: break-word;
+    }
+
+    .mini .value strong {
+      font-size: 16px;
+    }
+
+    .grid {
+      display: grid;
+      grid-template-columns: 1.2fr 0.8fr;
+      gap: 16px;
+    }
+
+    .section {
+      padding: 20px;
+    }
+
+    .section h2 {
+      margin: 0 0 12px;
+      font-size: 18px;
+      letter-spacing: -0.02em;
+    }
+
+    .field {
+      display: grid;
+      gap: 8px;
+      margin-bottom: 14px;
+    }
+
+    .field label {
+      font-size: 13px;
+      color: var(--muted);
+    }
+
+    input, select, button, textarea {
+      font: inherit;
+    }
+
+    input[type="text"], select {
+      width: 100%;
+      border-radius: 14px;
+      border: 1px solid var(--line);
+      background: linear-gradient(180deg, color-mix(in srgb, var(--bg-elev) 88%, #fff 12%), var(--bg-soft));
+      color: var(--fg);
+      padding: 12px 14px;
+      outline: none;
+      box-shadow: inset 0 1px 0 rgba(255,255,255,0.04);
+    }
+
+    input[type="text"]:focus, select:focus {
+      border-color: color-mix(in srgb, var(--accent-2) 55%, var(--line));
+      box-shadow: 0 0 0 4px color-mix(in srgb, var(--accent-2) 16%, transparent);
+    }
+
+    select {
+      appearance: none;
+      background-image:
+        linear-gradient(45deg, transparent 50%, var(--muted) 50%),
+        linear-gradient(135deg, var(--muted) 50%, transparent 50%);
+      background-position:
+        calc(100% - 18px) calc(50% - 2px),
+        calc(100% - 12px) calc(50% - 2px);
+      background-size: 6px 6px, 6px 6px;
+      background-repeat: no-repeat;
+      padding-right: 36px;
+    }
+
+    .button-row {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+    }
+
+    .mode-select {
+      display: grid;
+      gap: 10px;
+    }
+
+    .mode-option {
+      display: flex;
+      align-items: center;
+      justify-content: flex-start;
+      gap: 10px;
+      width: 100%;
+      padding: 12px 14px;
+      color: var(--fg);
+      background: linear-gradient(180deg, color-mix(in srgb, var(--bg-elev) 88%, #fff 12%), var(--bg-soft));
+      border: 1px solid var(--line);
+      box-shadow: none;
+    }
+
+    .mode-option::after {
+      display: none;
+    }
+
+    .mode-option .mode-dot {
+      width: 10px;
+      height: 10px;
+      border-radius: 50%;
+      border: 2px solid color-mix(in srgb, var(--muted) 72%, transparent);
+      background: transparent;
+      box-shadow: none;
+      flex: 0 0 auto;
+    }
+
+    .mode-option.active {
+      border-color: color-mix(in srgb, var(--accent-2) 44%, var(--line));
+      background: linear-gradient(180deg, color-mix(in srgb, var(--accent-2) 18%, var(--bg-elev)), var(--bg-soft));
+    }
+
+    .mode-option.active .mode-dot {
+      border-color: var(--accent-2);
+      background: var(--accent-2);
+      box-shadow: 0 0 0 5px color-mix(in srgb, var(--accent-2) 18%, transparent);
+    }
+
+    .mode-state,
+    .warp-state {
+      margin-top: 8px;
+      color: var(--accent);
+      font-size: 12px;
+      font-weight: 700;
+      letter-spacing: 0.04em;
+      text-transform: uppercase;
+    }
+
+    .warp-toggle-card {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 16px;
+      padding: 16px 18px;
+      border-radius: 18px;
+      border: 1px solid var(--line);
+      background: linear-gradient(180deg, color-mix(in srgb, var(--bg-elev) 86%, #fff 14%), var(--bg-soft));
+      box-shadow: 0 12px 32px rgba(0,0,0,0.05);
+      cursor: pointer;
+    }
+
+    .warp-toggle-card .warp-copy {
+      min-width: 0;
+    }
+
+    .warp-title {
+      font-size: 16px;
+      font-weight: 800;
+      margin-bottom: 4px;
+    }
+
+    .warp-desc {
+      color: var(--muted);
+      font-size: 13px;
+      line-height: 1.5;
+    }
+
+    button {
+      border: 0;
+      border-radius: 14px;
+      padding: 11px 15px;
+      color: white;
+      cursor: pointer;
+      background: linear-gradient(135deg, var(--accent-2), var(--accent));
+      box-shadow: 0 12px 28px rgba(37,99,235,0.18);
+      transition: transform .16s ease, opacity .16s ease, box-shadow .16s ease, filter .16s ease;
+      position: relative;
+      overflow: hidden;
+    }
+
+    button::after {
+      content: '';
+      position: absolute;
+      inset: 0;
+      background: linear-gradient(120deg, transparent 0%, rgba(255,255,255,0.18) 50%, transparent 100%);
+      transform: translateX(-120%);
+      transition: transform .35s ease;
+    }
+
+    button:hover:not(:disabled)::after { transform: translateX(120%); }
+    button:hover:not(:disabled) { transform: translateY(-1px); filter: saturate(1.02); }
+
+    button.secondary {
+      background: linear-gradient(135deg, color-mix(in srgb, var(--bg-soft) 82%, #fff), color-mix(in srgb, var(--bg-soft) 58%, #000));
+      color: var(--fg);
+      border: 1px solid var(--line);
+      box-shadow: none;
+    }
+
+    button.danger {
+      background: linear-gradient(135deg, #ef4444, #b91c1c);
+      box-shadow: 0 10px 24px rgba(239,68,68,0.18);
+    }
+
+    button:disabled { opacity: 0.55; cursor: not-allowed; transform: none; }
+
+    .log {
+      height: 360px;
+      overflow: auto;
+      padding: 0;
+      display: grid;
+      gap: 12px;
+    }
+
+    .log-box {
+      margin-top: 12px;
+      height: 310px;
+      overflow: auto;
+      border-radius: 18px;
+      border: 1px solid var(--line);
+      background: linear-gradient(180deg, color-mix(in srgb, var(--bg-elev) 80%, #fff 20%), rgba(0,0,0,0.05));
+      padding: 14px;
+      font-family: Consolas, "Cascadia Mono", "SFMono-Regular", monospace;
+      font-size: 12px;
+      line-height: 1.55;
+      white-space: pre-wrap;
+      box-shadow: inset 0 1px 0 rgba(255,255,255,0.04);
+    }
+
+    .adapter-list {
+      margin-top: 14px;
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+      gap: 12px;
+    }
+
+    .adapter-card {
+      border-radius: 18px;
+      border: 1px solid var(--line);
+      background: linear-gradient(180deg, color-mix(in srgb, var(--bg-elev) 86%, #fff 14%), var(--bg-soft));
+      padding: 14px;
+      display: grid;
+      gap: 8px;
+      box-shadow: 0 12px 30px rgba(0,0,0,0.04);
+      transition: transform .18s ease, box-shadow .18s ease, border-color .18s ease;
+    }
+
+    .adapter-card:hover {
+      transform: translateY(-2px);
+      border-color: var(--line-strong);
+      box-shadow: 0 18px 40px rgba(0,0,0,0.07);
+    }
+
+    .adapter-head {
+      display: flex;
+      justify-content: space-between;
+      gap: 10px;
+      align-items: baseline;
+    }
+
+    .adapter-name {
+      font-weight: 800;
+      font-size: 15px;
+      letter-spacing: -0.01em;
+    }
+
+    .pill {
+      padding: 3px 9px;
+      border-radius: 999px;
+      border: 1px solid var(--line);
+      font-size: 11px;
+      color: var(--muted);
+      background: rgba(255,255,255,0.04);
+    }
+
+    .adapter-meta {
+      font-size: 12px;
+      color: var(--muted);
+      line-height: 1.45;
+    }
+
+    .stack-row {
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+    }
+
+    .stack-pill {
+      font-size: 12px;
+      border-radius: 999px;
+      padding: 5px 9px;
+      border: 1px solid var(--line);
+      background: rgba(0,0,0,0.08);
+    }
+
+    .stack-pill.on {
+      border-color: color-mix(in srgb, var(--success) 40%, var(--line));
+      color: var(--success);
+    }
+
+    .stack-pill.off {
+      border-color: color-mix(in srgb, var(--danger) 45%, var(--line));
+      color: var(--danger);
+    }
+
+    .ip-block {
+      font-family: Consolas, "Cascadia Mono", monospace;
+      font-size: 12px;
+      line-height: 1.45;
+      word-break: break-word;
+      background: rgba(0,0,0,0.08);
+      border: 1px solid var(--line);
+      border-radius: 12px;
+      padding: 9px 10px;
+    }
+
+    .section-head {
+      display: flex;
+      justify-content: space-between;
+      gap: 12px;
+      align-items: flex-end;
+      margin-bottom: 14px;
+    }
+
+    .section-head h2 {
+      margin: 0;
+    }
+
+    .section-kicker {
+      color: var(--muted);
+      font-size: 12px;
+      line-height: 1.5;
+    }
+
+    .control-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 16px;
+    }
+
+    .control-card {
+      padding: 16px;
+      border-radius: 18px;
+      border: 1px solid var(--line);
+      background: linear-gradient(180deg, color-mix(in srgb, var(--bg-elev) 86%, #fff 14%), var(--bg-soft));
+    }
+
+    .control-label {
+      color: var(--muted);
+      font-size: 12px;
+      margin-bottom: 8px;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+    }
+
+    .control-value {
+      font-size: 18px;
+      font-weight: 700;
+      margin-bottom: 10px;
+      letter-spacing: -0.02em;
+    }
+
+    .control-value small {
+      display: block;
+      margin-top: 4px;
+      font-size: 12px;
+      font-weight: 500;
+      color: var(--muted);
+    }
+
+    .footer-note {
+      margin-top: 14px;
+      color: var(--muted);
+      font-size: 12px;
+      line-height: 1.6;
+    }
+
+    @media (max-width: 980px) {
+      .hero, .grid, .control-grid { grid-template-columns: 1fr; }
+      .log { height: auto; }
+      .log-box { height: 260px; }
+      .mode-switch {
+        top: 12px;
+        right: 12px;
+      }
+      .github-fab {
+        left: 12px;
+        bottom: 12px;
+        width: 48px;
+        height: 48px;
+        border-radius: 16px;
+      }
+      .github-fab img {
+        width: 24px;
+        height: 24px;
+      }
+      .easy-mode-card {
+        flex-direction: column;
+        align-items: flex-start;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div class="mode-switch" aria-label="高级模式切换">
+    <span class="label">高级模式</span>
+    <label class="toggle" title="切换高级模式">
+      <input id="advancedModeToggle" type="checkbox" />
+      <span class="toggle-track" aria-hidden="true"></span>
+    </label>
+  </div>
+
+  <a class="github-fab" href="https://github.com/evansrrr/BKNetwork" target="_blank" rel="noreferrer" aria-label="访问 GitHub 主页">
+    <picture>
+      <source srcset="github-dark.svg" media="(prefers-color-scheme: dark)" />
+      <img src="github-light.svg" alt="GitHub" />
+    </picture>
+  </a>
+
+  <main class="shell">
+    <section class="hero">
+      <div class="panel hero-main">
+        <div>
+          <div class="eyebrow">BKNetwork</div>
+          <h1>北科校园网助手</h1>
+          <p class="lead">通过浏览器管理网卡 IPv4 / IPv6 绑定和 Cloudflare WARP。页面会自动连接 WebSocket，实时显示后端事件与操作结果。</p>
+        </div>
+        <div class="status-row">
+          <div class="badge"><span id="backendDot" class="dot warn"></span><span id="backendBadge">后端状态</span></div>
+          <div class="badge"><span id="networkDot" class="dot"></span><span id="networkBadge">网络状态</span></div>
+          <div class="badge"><span id="freeDot" class="dot"></span><span id="freeBadge">免流状态</span></div>
+        </div>
+      </div>
+
+      <aside class="panel hero-side">
+        <a class="mini mini-link" href="http://202.204.48.66" target="_blank" rel="noreferrer">
+          <div class="label">点击跳转</div>
+          <div class="value">登录校园网</div>
+        </a>
+        <a class="mini mini-link" href="https://zifuwu.ustb.edu.cn/" target="_blank" rel="noreferrer">
+          <div class="label">点击跳转</div>
+          <div class="value">校园网管理系统</div>
+        </a>
+        <div class="mini">
+          <div class="label">本月流量统计</div>
+          <div class="value" id="trafficUsage">未加载</div>
+        </div>
+        <div class="mini">
+          <div class="label">状态更新时间</div>
+          <div class="value" id="lastUpdated">未加载</div>
+        </div>
+      </aside>
+    </section>
+
+    <section class="panel section easy-mode" id="easyModeSection">
+      <div class="section-head">
+        <div>
+          <h2>校园网免流</h2>
+          <br/>
+        </div>
+      </div>
+      <label class="easy-mode-card" for="easyModeToggle">
+        <div>
+          <div class="easy-mode-title">免流模式</div>
+          <div class="easy-mode-desc">开启后自动切换为仅 v6，并启用 WARP；关闭后恢复双栈并关闭 WARP</div>
+          <div class="easy-mode-state" id="easyModeState">当前关闭</div>
+        </div>
+        <span class="toggle">
+          <input id="easyModeToggle" type="checkbox" />
+          <span class="toggle-track" aria-hidden="true"></span>
+        </span>
+      </label>
+      <br/><br/>
+      <div class="section-head">
+        <div>
+          <h2>免流模式需安装 Warp</h2>
+          <div class="section-kicker"><a href="https://downloads.cloudflareclient.com/v1/download/windows/ga" target="_blank">在此下载 Warp</a>，是否开机自启动不影响</div>
+        </div>
+      </div>
+    </section>
+
+    <div class="advanced-only">
+      <section class="grid">
+        <div class="panel section">
+          <div class="section-head">
+            <div>
+              <h2>网络控制</h2>
+              <div class="section-kicker">选择目标网卡后，切换只会影响该接口的 IPv4 / IPv6 绑定。</div>
+            </div>
+          </div>
+          <div class="control-grid">
+            <div class="control-card">
+              <div class="control-label">目标网卡</div>
+              <div class="control-value">
+                <select id="ifName2">
+                  <option value="WiFi">WiFi</option>
+                </select>
+                <small>下拉选择需要切换的接口</small>
+              </div>
+            </div>
+            <div class="control-card">
+              <div class="control-label">切换模式</div>
+              <div class="mode-select" role="radiogroup" aria-label="网络模式选择">
+                <button id="btnIpv4" class="mode-option" type="button" onclick="switchStack('ipv4')" aria-pressed="false">
+                  <span class="mode-dot" aria-hidden="true"></span>
+                  <span>仅 v4</span>
+                </button>
+                <button id="btnIpv6" class="mode-option" type="button" onclick="switchStack('ipv6')" aria-pressed="false">
+                  <span class="mode-dot" aria-hidden="true"></span>
+                  <span>仅 v6</span>
+                </button>
+                <button id="btnBoth" class="mode-option" type="button" onclick="switchStack('both')" aria-pressed="false">
+                  <span class="mode-dot" aria-hidden="true"></span>
+                  <span>双栈</span>
+                </button>
+              </div>
+              <div class="mode-state" id="stackModeState">当前：未加载</div>
+            </div>
+          </div>
+          <div class="footer-note">说明：仅 v4 会启用 IPv4 并禁用 IPv6；仅 v6 会禁用 IPv4 并启用 IPv6；双栈会同时启用 IPv4 与 IPv6。实际执行需要管理员权限，页面会从后端事件中接收成功/失败消息。</div>
+        </div>
+
+        <div class="panel section">
+          <div class="section-head">
+            <div>
+              <h2>Cloudflare WARP</h2>
+              <div class="section-kicker">通过本机 warp-cli 切换隧道连接状态，状态由 WS 快照同步。</div>
+            </div>
+          </div>
+          <label class="warp-toggle-card" for="warpToggle">
+            <div class="warp-copy">
+              <div class="warp-title">WARP 开关</div>
+              <div class="warp-desc">打开即启动 WARP，关闭即停止 WARP。当前状态来自 WebSocket 返回内容。</div>
+              <div class="warp-state" id="warpState">当前：未加载</div>
+            </div>
+            <span class="toggle">
+              <input id="warpToggle" type="checkbox" />
+              <span class="toggle-track" aria-hidden="true"></span>
+            </span>
+          </label>
+          <div class="footer-note">后端会调用 <code>warp-cli</code>，若客户端不可用会直接返回错误信息。</div>
+        </div>
+      </section>
+
+      <section class="section" style="margin-top:16px;">
+        <div class="section-head">
+          <div>
+            <h2>网卡</h2>
+            <div class="section-kicker">中间显示受监控的网卡列表与状态。</div>
+          </div>
+        </div>
+        <div class="adapter-list" id="adapterList"></div>
+      </section>
+
+      <section class="section" style="margin-top:12px;">
+        <div class="section-head">
+          <div>
+            <h2>日志</h2>
+            <div class="section-kicker">实时日志流，按时间倒序显示最新事件。</div>
+          </div>
+        </div>
+        <div class="log-box" id="log"></div>
+      </section>
+    </div>
+  </main>
+
+  <script>
+    const logEl = document.getElementById('log');
+    const advancedModeToggleEl = document.getElementById('advancedModeToggle');
+    const backendBadgeEl = document.getElementById('backendBadge');
+    const backendBadgeDotEl = document.getElementById('backendDot');
+    const networkBadgeEl = document.getElementById('networkBadge');
+    const networkBadgeDotEl = document.getElementById('networkDot');
+    const freeBadgeEl = document.getElementById('freeBadge');
+    const freeBadgeDotEl = document.getElementById('freeDot');
+    const warpToggleEl = document.getElementById('warpToggle');
+    const warpStateEl = document.getElementById('warpState');
+    const easyModeToggleEl = document.getElementById('easyModeToggle');
+    const easyModeStateEl = document.getElementById('easyModeState');
+    const stackModeStateEl = document.getElementById('stackModeState');
+    const lastResultEl = document.getElementById('lastResult');
+    const lastUpdatedEl = document.getElementById('lastUpdated');
+    const trafficUsageEl = document.getElementById('trafficUsage');
+    const adapterListEl = document.getElementById('adapterList');
+    const targetAdapterSelects = ['ifName', 'ifName2'].map(id => document.getElementById(id));
+    const stackModeButtons = {
+      ipv4: document.getElementById('btnIpv4'),
+      ipv6: document.getElementById('btnIpv6'),
+      both: document.getElementById('btnBoth'),
+    };
+    const buttons = [stackModeButtons.ipv4, stackModeButtons.ipv6, stackModeButtons.both, warpToggleEl, easyModeToggleEl].filter(Boolean);
+    let latestNetwork = null;
+    const badgeState = {
+      network: { stable: null, pending: null },
+      warp: { stable: null, pending: null },
+    };
+
+    function setTargetAdapter(value) {
+      const next = typeof value === 'string' && value.trim() !== '' ? value.trim() : 'WiFi';
+      for (const select of targetAdapterSelects) {
+        if (select) {
+          select.value = next;
+        }
+      }
+      syncEasyModeState(latestNetwork);
+    }
+
+    for (const select of targetAdapterSelects) {
+      if (!select) continue;
+      select.addEventListener('change', () => setTargetAdapter(select.value));
+    }
+
+    function setBusy(busy) {
+      buttons.forEach(btn => btn.disabled = busy);
+    }
+
+    function settleBoolState(state, next, force = false) {
+      if (force || state.stable === null) {
+        state.stable = next;
+        state.pending = null;
+        return next;
+      }
+      if (state.stable === next) {
+        state.pending = null;
+        return next;
+      }
+      if (state.pending === next) {
+        state.stable = next;
+        state.pending = null;
+        return next;
+      }
+      state.pending = next;
+      return state.stable;
+    }
+
+    function applyOptimisticNetworkState({ warpConnected, adapterMode } = {}) {
+      if (!latestNetwork) {
+        return;
+      }
+
+      const targetName = currentIfName();
+      const nextAdapters = Array.isArray(latestNetwork.adapters)
+        ? latestNetwork.adapters.map(adapter => {
+            if (!adapter || adapter.name !== targetName) {
+              return adapter;
+            }
+            const nextAdapter = { ...adapter };
+            if (adapterMode === 'ipv4') {
+              nextAdapter.ipv4Enabled = true;
+              nextAdapter.ipv6Enabled = false;
+            } else if (adapterMode === 'ipv6') {
+              nextAdapter.ipv4Enabled = false;
+              nextAdapter.ipv6Enabled = true;
+            } else if (adapterMode === 'both') {
+              nextAdapter.ipv4Enabled = true;
+              nextAdapter.ipv6Enabled = true;
+            }
+            if (typeof warpConnected === 'boolean') {
+              nextAdapter.freeFlow = warpConnected && !!nextAdapter.ipv6Enabled && !nextAdapter.ipv4Enabled;
+            }
+            return nextAdapter;
+          })
+        : latestNetwork.adapters;
+
+      latestNetwork = {
+        ...latestNetwork,
+        warp: typeof warpConnected === 'boolean'
+          ? { ...(latestNetwork.warp || {}), connected: warpConnected }
+          : latestNetwork.warp,
+        adapters: nextAdapters,
+      };
+      if (typeof warpConnected === 'boolean') {
+        badgeState.warp.stable = warpConnected;
+        badgeState.warp.pending = null;
+      }
+      renderStatus({
+        service: { name: 'BKNetwork' },
+        lastEvent: { type: 'network.status', message: 'optimistic update' },
+        network: latestNetwork,
+      }, true);
+    }
+
+    function getAdapterMode(adapter) {
+      const ipv4 = !!adapter?.ipv4Enabled;
+      const ipv6 = !!adapter?.ipv6Enabled;
+      if (ipv4 && !ipv6) {
+        return 'ipv4';
+      }
+      if (!ipv4 && ipv6) {
+        return 'ipv6';
+      }
+      if (ipv4 && ipv6) {
+        return 'both';
+      }
+      return 'unknown';
+    }
+
+    function setAdvancedMode(enabled) {
+      document.body.classList.toggle('advanced-mode', !!enabled);
+      if (advancedModeToggleEl) {
+        advancedModeToggleEl.checked = !!enabled;
+      }
+    }
+
+    function setDot(dotEl, tone) {
+      if (dotEl) dotEl.className = `dot ${tone || ''}`.trim();
+    }
+
+    function setText(el, value) {
+      if (el) {
+        el.textContent = value;
+      }
+    }
+
+    function appendLog(line) {
+      const stamp = new Date().toLocaleTimeString();
+      if (logEl) {
+        logEl.textContent = `[${stamp}] ${line}\n` + logEl.textContent;
+      }
+    }
+
+    function setBackendBadge(tone) {
+      setDot(backendBadgeDotEl, tone);
+    }
+
+    function setNetworkBadge(tone) {
+      setDot(networkBadgeDotEl, tone);
+    }
+
+    function setFreeBadge(tone) {
+      setDot(freeBadgeDotEl, tone);
+    }
+
+    function syncStackModeState(network) {
+      const ifName = currentIfName();
+      const adapter = Array.isArray(network?.adapters)
+        ? network.adapters.find(item => item && item.name === ifName)
+        : null;
+      const mode = getAdapterMode(adapter);
+      const labels = {
+        ipv4: '当前：仅 v4',
+        ipv6: '当前：仅 v6',
+        both: '当前：双栈',
+        unknown: '当前：未知',
+      };
+
+      setText(stackModeStateEl, labels[mode] || labels.unknown);
+
+      for (const [key, button] of Object.entries(stackModeButtons)) {
+        if (!button) continue;
+        const active = key === mode;
+        button.classList.toggle('active', active);
+        button.setAttribute('aria-pressed', String(active));
+      }
+    }
+
+    function syncWarpState(network, force = false) {
+      if (!warpToggleEl || !warpStateEl) {
+        return;
+      }
+      const enabled = settleBoolState(badgeState.warp, !!network?.warp?.connected, force);
+      warpToggleEl.checked = enabled;
+      setText(warpStateEl, enabled ? '当前：已开启' : '当前：已关闭');
+    }
+
+    function syncAdvancedControls(network, force = false) {
+      syncStackModeState(network);
+      syncWarpState(network, force);
+    }
+
+    function syncEasyModeState(network) {
+      if (!easyModeToggleEl || !easyModeStateEl) {
+        return;
+      }
+      const ifName = currentIfName();
+      const adapter = Array.isArray(network?.adapters)
+        ? network.adapters.find(item => item && item.name === ifName)
+        : null;
+      const enabled = !!network?.warp?.connected && !!adapter?.freeFlow;
+      easyModeToggleEl.checked = enabled;
+      setText(easyModeStateEl, enabled ? '当前已开启' : '当前关闭');
+    }
+
+    function currentIfName() {
+      const value = targetAdapterSelects[1]?.value?.trim() || targetAdapterSelects[0]?.value?.trim();
+      return value || 'WiFi';
+    }
+
+    function getAdapterOptions(network) {
+      const names = Array.isArray(network?.availableAdapters) ? network.availableAdapters : [];
+      if (names.length > 0) {
+        return names.filter(name => typeof name === 'string' && name.trim() !== '');
+      }
+      return Array.isArray(network?.adapters)
+        ? network.adapters.map(adapter => adapter?.name).filter(name => typeof name === 'string' && name.trim() !== '')
+        : [];
+    }
+
+    function syncTargetAdapterSelects(names) {
+      const options = Array.isArray(names) ? names : [];
+      const current = currentIfName();
+      const desired = options.includes(current) ? current : (options[0] || 'WiFi');
+
+      for (const select of targetAdapterSelects) {
+        if (!select) continue;
+        const previous = select.value;
+        select.innerHTML = '';
+        if (options.length === 0) {
+          const option = document.createElement('option');
+          option.value = 'WiFi';
+          option.textContent = 'WiFi';
+          select.appendChild(option);
+          continue;
+        }
+        for (const name of options) {
+          const option = document.createElement('option');
+          option.value = name;
+          option.textContent = name;
+          select.appendChild(option);
+        }
+        select.value = options.includes(previous) ? previous : desired;
+      }
+
+      const selected = options.includes(desired) ? desired : (options[0] || 'WiFi');
+      setTargetAdapter(selected);
+    }
+
+    function renderStatus(data, force = false) {
+      syncTargetAdapterSelects(getAdapterOptions(data?.network));
+      renderNetwork(data?.network);
+      updateStatusBadges(data?.network, force);
+    }
+
+    function fmtIPList(arr) {
+      if (!Array.isArray(arr) || arr.length === 0) {
+        return 'none';
+      }
+      return arr.join('\n');
+    }
+
+    function fmtOne(value) {
+      if (typeof value !== 'string' || value.trim() === '') {
+        return 'none';
+      }
+      return value.trim();
+    }
+
+    function fmtTrafficValue(value) {
+      const number = Number(value);
+      return Number.isFinite(number) ? number.toFixed(2) : '-';
+    }
+
+    function renderTrafficUsage(payload) {
+      trafficUsageEl.innerHTML = `v4流量：${fmtTrafficValue(payload?.data?.v4)} MB<br />v6流量：${fmtTrafficValue(payload?.data?.v6)} MB`;
+      setText(lastUpdatedEl, new Date().toLocaleString());
+    }
+
+    function loadTrafficUsage() {
+      return new Promise((resolve, reject) => {
+        const url = 'http://202.204.48.66:801/eportal/portal/visitor/loadUserFlow';
+        const script = document.createElement('script');
+        const previousJsonpReturn = window.jsonpReturn;
+        let settled = false;
+
+        function cleanup() {
+          clearTimeout(timeoutId);
+          script.remove();
+          if (previousJsonpReturn === undefined) {
+            delete window.jsonpReturn;
+          } else {
+            window.jsonpReturn = previousJsonpReturn;
+          }
+        }
+
+        const timeoutId = window.setTimeout(() => {
+          if (settled) {
+            return;
+          }
+          settled = true;
+          cleanup();
+          reject(new Error('timeout'));
+        }, 5000);
+
+        window.jsonpReturn = (payload) => {
+          if (settled) {
+            return;
+          }
+          settled = true;
+          try {
+            if (!payload || payload.result !== 1 || !payload.data) {
+              throw new Error('invalid payload');
+            }
+            cleanup();
+            resolve(payload);
+          } catch (err) {
+            cleanup();
+            reject(err);
+          }
+        };
+
+        script.onerror = () => {
+          if (settled) {
+            return;
+          }
+          settled = true;
+          cleanup();
+          reject(new Error('load failed'));
+        };
+
+        script.src = `${url}?t=${Date.now()}`;
+        document.head.appendChild(script);
+      });
+    }
+
+    function refreshTrafficUsage() {
+      return loadTrafficUsage()
+        .then((payload) => {
+          renderTrafficUsage(payload);
+          return payload;
+        })
+        .catch(() => {});
+    }
+
+    function renderNetwork(network) {
+      latestNetwork = network;
+      syncTargetAdapterSelects(getAdapterOptions(network));
+      adapterListEl.innerHTML = '';
+      const adapters = network?.adapters;
+      if (!Array.isArray(adapters) || adapters.length === 0) {
+        const empty = document.createElement('div');
+        empty.className = 'kv';
+        empty.innerHTML = '<span>网卡状态</span><strong>暂无数据</strong>';
+        adapterListEl.appendChild(empty);
+        return;
+      }
+
+      for (const adapter of adapters) {
+        const card = document.createElement('article');
+        card.className = 'adapter-card';
+        card.innerHTML = `
+          <div class="adapter-head">
+            <div class="adapter-name">${adapter.name ?? '-'}</div>
+            <span class="pill">${adapter.status ?? 'unknown'}</span>
+          </div>
+          <div class="adapter-meta">${adapter.description ?? ''}</div>
+          <div class="adapter-meta">MAC: ${adapter.macAddress ?? '-'}</div>
+          <div class="adapter-meta">IPv4 GW: ${fmtOne(adapter.ipv4Gateway)}</div>
+          <div class="adapter-meta">IPv6 GW: ${fmtOne(adapter.ipv6Gateway)}</div>
+          <div class="ip-block">DNS\n${fmtIPList(adapter.dns)}</div>
+          <div class="stack-row">
+            <span class="stack-pill ${adapter.ipv4Enabled ? 'on' : 'off'}">IPv4 ${adapter.ipv4Enabled ? 'ON' : 'OFF'}</span>
+            <span class="stack-pill ${adapter.ipv6Enabled ? 'on' : 'off'}">IPv6 ${adapter.ipv6Enabled ? 'ON' : 'OFF'}</span>
+          </div>
+          <div class="ip-block">IPv4\n${fmtIPList(adapter.ipv4)}</div>
+          <div class="ip-block">IPv6\n${fmtIPList(adapter.ipv6)}</div>
+        `;
+        adapterListEl.appendChild(card);
+      }
+    }
+
+    function updateStatusBadges(network, force = false) {
+      const online = settleBoolState(badgeState.network, !!network?.online, force);
+      setNetworkBadge(online ? 'ok' : 'warn');
+      syncAdvancedControls(network, force);
+      syncEasyModeState(network);
+
+      const ifName = currentIfName();
+      if (!network || !Array.isArray(network.adapters)) {
+        setFreeBadge('warn');
+        return;
+      }
+      const adapter = network.adapters.find(a => a && a.name === ifName);
+      setFreeBadge(adapter?.freeFlow ? 'ok' : 'warn');
+    }
+
+    async function refreshStatus(force = false) {
+      try {
+        const res = await fetch('/api/v1/status');
+        const data = await res.json();
+        renderStatus(data, force);
+        appendLog('状态已刷新');
+      } catch (err) {
+        appendLog(`状态刷新失败：${err.message}`);
+      }
+    }
+
+    async function postAction(path, body) {
+      setBusy(true);
+      try {
+        const res = await fetch(path, {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify(body),
+        });
+        const data = await res.json();
+        setText(lastResultEl, JSON.stringify(data, null, 2));
+        appendLog(`${path} -> ${data.ok ? 'ok' : 'error'}`);
+        if (!res.ok) {
+          throw new Error(data.error || 'request failed');
+        }
+        return data;
+      } catch (err) {
+        setText(lastResultEl, err.message);
+        appendLog(`请求失败：${err.message}`);
+        throw err;
+      } finally {
+        setBusy(false);
+      }
+    }
+
+    async function postActionSilently(path, body) {
+      const res = await fetch(path, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify(body),
+      });
+      const data = await res.json();
+      setText(lastResultEl, JSON.stringify(data, null, 2));
+      appendLog(`${path} -> ${data.ok ? 'ok' : 'error'}`);
+      if (!res.ok) {
+        throw new Error(data.error || 'request failed');
+      }
+      return data;
+    }
+
+    async function switchStack(mode) {
+      const ifName = currentIfName();
+      await postAction('/api/v1/switch', { ifName, mode });
+    }
+
+    async function applyWarpToggle(enabled) {
+      if (!warpToggleEl || !warpStateEl) {
+        return;
+      }
+      setBusy(true);
+      warpToggleEl.checked = !!enabled;
+      setText(warpStateEl, enabled ? '正在开启...' : '正在关闭...');
+      try {
+        await postActionSilently('/api/v1/warp', { action: enabled ? 'start' : 'stop' });
+        setText(warpStateEl, enabled ? '当前：已开启' : '当前：已关闭');
+        applyOptimisticNetworkState({ warpConnected: enabled });
+        setTimeout(() => refreshStatus().catch(() => {}), 1200);
+      } catch (err) {
+        warpToggleEl.checked = !enabled;
+        setText(warpStateEl, '切换失败');
+        appendLog(`WARP 切换失败：${err.message}`);
+        throw err;
+      } finally {
+        setBusy(false);
+      }
+    }
+
+    async function applyEasyMode(enabled) {
+      if (!easyModeToggleEl || !easyModeStateEl) {
+        return;
+      }
+      setBusy(true);
+      easyModeToggleEl.checked = !!enabled;
+      setText(easyModeStateEl, enabled ? '正在开启...' : '正在关闭...');
+      try {
+        if (enabled) {
+          await postActionSilently('/api/v1/switch', { ifName: currentIfName(), mode: 'ipv6' });
+          await postActionSilently('/api/v1/warp', { action: 'start' });
+          setText(easyModeStateEl, '当前已开启');
+          applyOptimisticNetworkState({ warpConnected: true, adapterMode: 'ipv6' });
+          setTimeout(() => refreshStatus().catch(() => {}), 1200);
+        } else {
+          await postActionSilently('/api/v1/warp', { action: 'stop' });
+          await postActionSilently('/api/v1/switch', { ifName: currentIfName(), mode: 'both' });
+          setText(easyModeStateEl, '当前关闭');
+          applyOptimisticNetworkState({ warpConnected: false, adapterMode: 'both' });
+          setTimeout(() => refreshStatus().catch(() => {}), 1200);
+        }
+      } catch (err) {
+        easyModeToggleEl.checked = !enabled;
+        setText(easyModeStateEl, '切换失败');
+        appendLog(`免流模式切换失败：${err.message}`);
+        throw err;
+      } finally {
+        setBusy(false);
+      }
+    }
+
+    function connectWS() {
+      const scheme = location.protocol === 'https:' ? 'wss' : 'ws';
+      const ws = new WebSocket(`${scheme}://${location.host}/ws`);
+
+      ws.addEventListener('open', () => {
+        setBackendBadge('ok');
+        appendLog('WebSocket 已连接');
+      });
+
+      ws.addEventListener('message', (event) => {
+        try {
+          const data = JSON.parse(event.data);
+          setBackendBadge(data.type === 'heartbeat' || data.type === 'hello' || data.type === 'network.status' ? 'ok' : (data.type === 'error' ? 'err' : 'ok'));
+          if (data.type === 'network.status') {
+            renderStatus({
+              service: { name: 'BKNetwork' },
+              lastEvent: { type: data.type, message: data.message },
+              network: data.data,
+            });
+            setText(lastUpdatedEl, `Network ${new Date().toLocaleTimeString()}`);
+            return;
+          }
+          if (data.type === 'heartbeat') {
+            return;
+          }
+          if (data.type === 'hello') {
+            return;
+          }
+          setText(lastResultEl, JSON.stringify(data, null, 2));
+          appendLog(`${data.type} · ${data.message}`);
+        } catch {
+          appendLog(String(event.data));
+        }
+      });
+
+      ws.addEventListener('close', () => {
+        setBackendBadge('err');
+        appendLog('WebSocket 已断开，准备重连');
+        setTimeout(connectWS, 2000);
+      });
+
+      ws.addEventListener('error', () => {
+        setBackendBadge('warn');
+      });
+    }
+
+    if (advancedModeToggleEl) {
+      advancedModeToggleEl.addEventListener('change', () => setAdvancedMode(advancedModeToggleEl.checked));
+    }
+
+    if (easyModeToggleEl) {
+      easyModeToggleEl.addEventListener('change', () => {
+        applyEasyMode(easyModeToggleEl.checked).catch(() => {});
+      });
+    }
+
+    if (warpToggleEl) {
+      warpToggleEl.addEventListener('change', () => {
+        applyWarpToggle(warpToggleEl.checked).catch(() => {});
+      });
+    }
+
+    setAdvancedMode(false);
+
+    refreshStatus(true);
+    refreshTrafficUsage();
+    setInterval(refreshTrafficUsage, 60000);
+    connectWS();
+  </script>
+</body>
+</html>

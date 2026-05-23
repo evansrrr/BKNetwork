@@ -1,0 +1,883 @@
+package handlers
+
+import (
+	"context"
+	"encoding/json"
+	"errors"
+	"fmt"
+	"log"
+	"net"
+	"net/http"
+	"os/exec"
+	"sort"
+	"strings"
+	"sync"
+	"syscall"
+	"time"
+	"unsafe"
+
+	"bknetwork/internal/events"
+
+	"github.com/gorilla/websocket"
+	"golang.org/x/sys/windows"
+)
+
+var upgrader = websocket.Upgrader{
+	CheckOrigin: func(r *http.Request) bool {
+		return true
+	},
+}
+
+type apiResponse struct {
+	OK      bool        `json:"ok"`
+	Error   string      `json:"error,omitempty"`
+	Detail  string      `json:"detail,omitempty"`
+	Output  string      `json:"output,omitempty"`
+	Payload interface{} `json:"payload,omitempty"`
+}
+
+type adapterBasic struct {
+	Name                 string `json:"Name"`
+	Status               string `json:"Status"`
+	MacAddress           string `json:"MacAddress"`
+	InterfaceDescription string `json:"InterfaceDescription"`
+}
+
+type adapterBinding struct {
+	Name        string `json:"Name"`
+	ComponentID string `json:"ComponentID"`
+	Enabled     bool   `json:"Enabled"`
+}
+
+type adapterSnapshot struct {
+	Name        string   `json:"name"`
+	Status      string   `json:"status"`
+	Description string   `json:"description,omitempty"`
+	MacAddress  string   `json:"macAddress,omitempty"`
+	IPv4Enabled bool     `json:"ipv4Enabled"`
+	IPv6Enabled bool     `json:"ipv6Enabled"`
+	FreeFlow    bool     `json:"freeFlow"`
+	IPv4Gateway string   `json:"ipv4Gateway,omitempty"`
+	IPv6Gateway string   `json:"ipv6Gateway,omitempty"`
+	DNS         []string `json:"dns"`
+	IPv4        []string `json:"ipv4"`
+	IPv6        []string `json:"ipv6"`
+}
+
+type tcpProbeSnapshot struct {
+	Target    string `json:"target"`
+	OK        bool   `json:"ok"`
+	LatencyMs int64  `json:"latencyMs,omitempty"`
+	CheckedAt string `json:"checkedAt"`
+	Error     string `json:"error,omitempty"`
+}
+
+type warpSnapshot struct {
+	Connected bool   `json:"connected"`
+	CheckedAt string `json:"checkedAt"`
+	Raw       string `json:"raw,omitempty"`
+	Error     string `json:"error,omitempty"`
+}
+
+type networkSnapshot struct {
+	CollectedAt       string            `json:"collectedAt"`
+	Online            bool              `json:"online"`
+	Adapters          []adapterSnapshot `json:"adapters"`
+	AvailableAdapters []string          `json:"availableAdapters"`
+	CloudflareTCP     tcpProbeSnapshot  `json:"cloudflareTcp"`
+	Warp              warpSnapshot      `json:"warp"`
+}
+
+type ipConfigInfo struct {
+	InterfaceAlias string `json:"InterfaceAlias"`
+	IPv4Gateway    string `json:"IPv4Gateway"`
+	IPv6Gateway    string `json:"IPv6Gateway"`
+}
+
+type dnsInfo struct {
+	InterfaceAlias  string `json:"InterfaceAlias"`
+	ServerAddresses any    `json:"ServerAddresses"`
+}
+
+func normalizeStringSlice(v any) []string {
+	if v == nil {
+		return []string{}
+	}
+	out := make([]string, 0)
+	switch t := v.(type) {
+	case []any:
+		for _, item := range t {
+			if s, ok := item.(string); ok {
+				if trimmed := strings.TrimSpace(s); trimmed != "" {
+					out = append(out, trimmed)
+				}
+			}
+		}
+	case []string:
+		for _, s := range t {
+			if trimmed := strings.TrimSpace(s); trimmed != "" {
+				out = append(out, trimmed)
+			}
+		}
+	case string:
+		if trimmed := strings.TrimSpace(t); trimmed != "" {
+			out = append(out, trimmed)
+		}
+	default:
+		// ignore unknown shape
+	}
+	return out
+}
+
+func getDefaultRouteAliases(ctx context.Context, family, prefix string) ([]string, error) {
+	cmd := fmt.Sprintf("(Get-NetRoute -AddressFamily %s -DestinationPrefix '%s' -ErrorAction SilentlyContinue | Sort-Object RouteMetric, InterfaceMetric | Select-Object -ExpandProperty InterfaceAlias -Unique) | ConvertTo-Json -Compress", family, prefix)
+	raw, err := execWithTimeout(ctx, "powershell", "-NoProfile", "-NonInteractive", "-Command", cmd)
+	if err != nil && strings.TrimSpace(raw) == "" {
+		return nil, err
+	}
+	items, err := decodeJSONList[string](raw)
+	if err != nil {
+		return nil, err
+	}
+	aliases := make([]string, 0, len(items))
+	for _, item := range items {
+		if s := strings.TrimSpace(item); s != "" {
+			aliases = append(aliases, s)
+		}
+	}
+	return aliases, nil
+}
+
+func writeJSON(w http.ResponseWriter, v interface{}, code int) {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(code)
+	_ = json.NewEncoder(w).Encode(v)
+}
+
+func decodeJSONList[T any](raw string) ([]T, error) {
+	raw = strings.TrimSpace(raw)
+	if raw == "" {
+		return []T{}, nil
+	}
+	if strings.HasPrefix(raw, "[") {
+		var arr []T
+		if err := json.Unmarshal([]byte(raw), &arr); err != nil {
+			return nil, err
+		}
+		return arr, nil
+	}
+	var one T
+	if err := json.Unmarshal([]byte(raw), &one); err != nil {
+		return nil, err
+	}
+	return []T{one}, nil
+}
+
+func collectNetworkSnapshot() (networkSnapshot, error) {
+	ctx, cancel := context.WithTimeout(context.Background(), 8*time.Second)
+	defer cancel()
+
+	var (
+		basicRaw   string
+		basicErr   error
+		bindingRaw string
+		bindingErr error
+		ipCfgRaw   string
+		ipCfgErr   error
+		dnsRaw     string
+		dnsErr     error
+		defaultV4  []string
+		defaultV6  []string
+		warpStatus warpSnapshot
+		tcpProbe   tcpProbeSnapshot
+	)
+
+	var wg sync.WaitGroup
+	wg.Add(8)
+	go func() {
+		defer wg.Done()
+		basicCmd := "Get-NetAdapter | Select-Object Name, Status, MacAddress, InterfaceDescription | ConvertTo-Json -Compress"
+		basicRaw, basicErr = execWithTimeout(ctx, "powershell", "-NoProfile", "-NonInteractive", "-Command", basicCmd)
+	}()
+	go func() {
+		defer wg.Done()
+		bindingCmd := "Get-NetAdapterBinding | Where-Object { $_.ComponentID -in @('ms_tcpip','ms_tcpip6') } | Select-Object Name, ComponentID, Enabled | ConvertTo-Json -Compress"
+		bindingRaw, bindingErr = execWithTimeout(ctx, "powershell", "-NoProfile", "-NonInteractive", "-Command", bindingCmd)
+	}()
+	go func() {
+		defer wg.Done()
+		ipCfgCmd := "Get-NetIPConfiguration | Select-Object InterfaceAlias, @{Name='IPv4Gateway';Expression={$_.IPv4DefaultGateway.NextHop}}, @{Name='IPv6Gateway';Expression={$_.IPv6DefaultGateway.NextHop}} | ConvertTo-Json -Compress"
+		ipCfgRaw, ipCfgErr = execWithTimeout(ctx, "powershell", "-NoProfile", "-NonInteractive", "-Command", ipCfgCmd)
+	}()
+	go func() {
+		defer wg.Done()
+		dnsCmd := "Get-DnsClientServerAddress | Select-Object InterfaceAlias, ServerAddresses | ConvertTo-Json -Compress"
+		dnsRaw, dnsErr = execWithTimeout(ctx, "powershell", "-NoProfile", "-NonInteractive", "-Command", dnsCmd)
+	}()
+	go func() {
+		defer wg.Done()
+		defaultV4, _ = getDefaultRouteAliases(ctx, "IPv4", "0.0.0.0/0")
+	}()
+	go func() {
+		defer wg.Done()
+		defaultV6, _ = getDefaultRouteAliases(ctx, "IPv6", "::/0")
+	}()
+	go func() {
+		defer wg.Done()
+		warpStatus = probeWarpStatus(ctx)
+	}()
+	go func() {
+		defer wg.Done()
+		tcpProbe = probeCloudflareTCP(ctx)
+	}()
+	wg.Wait()
+
+	if basicErr != nil && strings.TrimSpace(basicRaw) == "" {
+		return networkSnapshot{}, fmt.Errorf("get adapter list failed: %w", basicErr)
+	}
+	basics, err := decodeJSONList[adapterBasic](basicRaw)
+	if err != nil {
+		return networkSnapshot{}, fmt.Errorf("parse adapter list failed: %w", err)
+	}
+
+	if bindingErr != nil && strings.TrimSpace(bindingRaw) == "" {
+		return networkSnapshot{}, fmt.Errorf("get adapter bindings failed: %w", bindingErr)
+	}
+	bindings, err := decodeJSONList[adapterBinding](bindingRaw)
+	if err != nil {
+		return networkSnapshot{}, fmt.Errorf("parse adapter bindings failed: %w", err)
+	}
+
+	if ipCfgErr != nil && strings.TrimSpace(ipCfgRaw) == "" {
+		return networkSnapshot{}, fmt.Errorf("get ip configuration failed: %w", ipCfgErr)
+	}
+	ipConfigs, err := decodeJSONList[ipConfigInfo](ipCfgRaw)
+	if err != nil {
+		return networkSnapshot{}, fmt.Errorf("parse ip configuration failed: %w", err)
+	}
+
+	if dnsErr != nil && strings.TrimSpace(dnsRaw) == "" {
+		return networkSnapshot{}, fmt.Errorf("get dns server list failed: %w", dnsErr)
+	}
+	dnsInfos, err := decodeJSONList[dnsInfo](dnsRaw)
+	if err != nil {
+		return networkSnapshot{}, fmt.Errorf("parse dns server list failed: %w", err)
+	}
+
+	ipv4Map := make(map[string][]string)
+	ipv6Map := make(map[string][]string)
+	ifs, err := net.Interfaces()
+	if err == nil {
+		for _, iface := range ifs {
+			addrs, addrErr := iface.Addrs()
+			if addrErr != nil {
+				continue
+			}
+			for _, addr := range addrs {
+				ip, _, parseErr := net.ParseCIDR(addr.String())
+				if parseErr != nil {
+					continue
+				}
+				if ip.To4() != nil {
+					ipv4Map[iface.Name] = append(ipv4Map[iface.Name], ip.String())
+				} else if ip.To16() != nil {
+					ipv6Map[iface.Name] = append(ipv6Map[iface.Name], ip.String())
+				}
+			}
+		}
+	}
+
+	bindingMap := make(map[string]map[string]bool)
+	for _, b := range bindings {
+		m, ok := bindingMap[b.Name]
+		if !ok {
+			m = map[string]bool{}
+			bindingMap[b.Name] = m
+		}
+		m[b.ComponentID] = b.Enabled
+	}
+
+	ipCfgMap := make(map[string]ipConfigInfo)
+	for _, cfg := range ipConfigs {
+		if strings.TrimSpace(cfg.InterfaceAlias) == "" {
+			continue
+		}
+		ipCfgMap[cfg.InterfaceAlias] = cfg
+	}
+
+	dnsMap := make(map[string][]string)
+	for _, info := range dnsInfos {
+		alias := strings.TrimSpace(info.InterfaceAlias)
+		if alias == "" {
+			continue
+		}
+		servers := normalizeStringSlice(info.ServerAddresses)
+		if len(servers) == 0 {
+			continue
+		}
+		existing := make(map[string]struct{}, len(dnsMap[alias]))
+		for _, s := range dnsMap[alias] {
+			existing[s] = struct{}{}
+		}
+		for _, s := range servers {
+			if _, ok := existing[s]; ok {
+				continue
+			}
+			dnsMap[alias] = append(dnsMap[alias], s)
+			existing[s] = struct{}{}
+		}
+	}
+
+	basicNameSet := make(map[string]struct{}, len(basics))
+	for _, b := range basics {
+		basicNameSet[b.Name] = struct{}{}
+	}
+
+	selected := make(map[string]struct{})
+	for _, name := range append(defaultV4, defaultV6...) {
+		if _, ok := basicNameSet[name]; ok {
+			selected[name] = struct{}{}
+		}
+	}
+	for _, b := range basics {
+		cfg, ok := ipCfgMap[b.Name]
+		if !ok {
+			continue
+		}
+		statusUp := strings.EqualFold(strings.TrimSpace(b.Status), "up")
+		hasGateway := strings.TrimSpace(cfg.IPv4Gateway) != "" || strings.TrimSpace(cfg.IPv6Gateway) != ""
+		if statusUp && hasGateway {
+			selected[b.Name] = struct{}{}
+		}
+	}
+	if _, ok := basicNameSet["CloudflareWARP"]; ok {
+		selected["CloudflareWARP"] = struct{}{}
+	}
+
+	availableAdapters := make([]string, 0, len(basics))
+	for _, b := range basics {
+		if name := strings.TrimSpace(b.Name); name != "" {
+			availableAdapters = append(availableAdapters, name)
+		}
+	}
+	sort.Strings(availableAdapters)
+
+	adapters := make([]adapterSnapshot, 0, len(basics))
+	for _, b := range basics {
+		if _, ok := selected[b.Name]; !ok {
+			continue
+		}
+		adapterBindings := bindingMap[b.Name]
+		cfg := ipCfgMap[b.Name]
+		ipv4 := ipv4Map[b.Name]
+		ipv6 := ipv6Map[b.Name]
+		dns := dnsMap[b.Name]
+		if ipv4 == nil {
+			ipv4 = []string{}
+		}
+		if ipv6 == nil {
+			ipv6 = []string{}
+		}
+		adapters = append(adapters, adapterSnapshot{
+			Name:        b.Name,
+			Status:      b.Status,
+			Description: b.InterfaceDescription,
+			MacAddress:  b.MacAddress,
+			IPv4Enabled: adapterBindings["ms_tcpip"],
+			IPv6Enabled: adapterBindings["ms_tcpip6"],
+			FreeFlow:    false,
+			IPv4Gateway: strings.TrimSpace(cfg.IPv4Gateway),
+			IPv6Gateway: strings.TrimSpace(cfg.IPv6Gateway),
+			DNS:         dns,
+			IPv4:        ipv4,
+			IPv6:        ipv6,
+		})
+	}
+
+	for i := range adapters {
+		adapters[i].FreeFlow = warpStatus.Connected && adapters[i].IPv6Enabled && !adapters[i].IPv4Enabled
+	}
+
+	online := hasOnlineAdapter(adapters)
+
+	sort.Slice(adapters, func(i, j int) bool {
+		return strings.ToLower(adapters[i].Name) < strings.ToLower(adapters[j].Name)
+	})
+
+	return networkSnapshot{
+		CollectedAt:       time.Now().Format(time.RFC3339),
+		Online:            online,
+		Adapters:          adapters,
+		AvailableAdapters: availableAdapters,
+		CloudflareTCP:     tcpProbe,
+		Warp:              warpStatus,
+	}, nil
+}
+
+func hasOnlineAdapter(adapters []adapterSnapshot) bool {
+	for _, adapter := range adapters {
+		if !strings.EqualFold(strings.TrimSpace(adapter.Status), "up") {
+			continue
+		}
+		if len(adapter.IPv4) > 0 || len(adapter.IPv6) > 0 {
+			return true
+		}
+		if strings.TrimSpace(adapter.IPv4Gateway) != "" || strings.TrimSpace(adapter.IPv6Gateway) != "" {
+			return true
+		}
+	}
+	return false
+}
+
+func probeCloudflareTCP(ctx context.Context) tcpProbeSnapshot {
+	result := tcpProbeSnapshot{
+		Target:    "cloudflare.com:443",
+		CheckedAt: time.Now().Format(time.RFC3339),
+	}
+	start := time.Now()
+	dialer := net.Dialer{Timeout: 3 * time.Second}
+	conn, err := dialer.DialContext(ctx, "tcp", result.Target)
+	if err != nil {
+		result.Error = err.Error()
+		return result
+	}
+	result.OK = true
+	result.LatencyMs = time.Since(start).Milliseconds()
+	_ = conn.Close()
+	return result
+}
+
+func probeWarpStatus(ctx context.Context) warpSnapshot {
+	result := warpSnapshot{CheckedAt: time.Now().Format(time.RFC3339)}
+	out, err := execWithTimeout(ctx, "warp-cli", "status")
+	result.Raw = strings.TrimSpace(out)
+	if err != nil && result.Raw == "" {
+		result.Error = err.Error()
+		return result
+	}
+	result.Connected = parseWarpConnected(result.Raw)
+	return result
+}
+
+func parseWarpConnected(raw string) bool {
+	text := strings.ToLower(strings.TrimSpace(raw))
+	if text == "" {
+		return false
+	}
+
+	lines := strings.Split(text, "\n")
+	for _, line := range lines {
+		line = strings.TrimSpace(strings.TrimPrefix(line, "\ufeff"))
+		if !strings.Contains(line, ":") {
+			continue
+		}
+		if value, ok := parseWarpStatusLine(line); ok {
+			return value
+		}
+	}
+
+	if strings.Contains(text, "not connected") || strings.Contains(text, "disconnected") || strings.Contains(text, "warp is off") || strings.Contains(text, "status: off") {
+		return false
+	}
+	if strings.Contains(text, "status: connected") || strings.Contains(text, "status update: connected") || strings.Contains(text, "warp is on") || strings.Contains(text, "connected") || strings.Contains(text, "已连接") || strings.Contains(text, "连接中") || strings.Contains(text, "已开启") || strings.Contains(text, "启用") {
+		return true
+	}
+	return false
+}
+
+func parseWarpStatusLine(line string) (bool, bool) {
+	parts := strings.SplitN(line, ":", 2)
+	if len(parts) != 2 {
+		return false, false
+	}
+
+	key := strings.TrimSpace(parts[0])
+	value := strings.TrimSpace(parts[1])
+	if key == "" || value == "" {
+		return false, false
+	}
+
+	if strings.Contains(key, "status") || strings.Contains(key, "state") || strings.Contains(key, "connection") || strings.Contains(key, "warp") {
+		switch {
+		case strings.Contains(value, "not connected"), strings.Contains(value, "disconnected"), strings.Contains(value, "off"), strings.Contains(value, "inactive"), strings.Contains(value, "disabled"), strings.Contains(value, "未连接"), strings.Contains(value, "已关闭"), strings.Contains(value, "关闭"):
+			return false, true
+		case strings.Contains(value, "connected"), strings.Contains(value, "on"), strings.Contains(value, "active"), strings.Contains(value, "enabled"), strings.Contains(value, "已连接"), strings.Contains(value, "已开启"), strings.Contains(value, "开启"), strings.Contains(value, "启用"):
+			return true, true
+		}
+	}
+
+	return false, false
+}
+
+func execWithTimeout(ctx context.Context, name string, args ...string) (string, error) {
+	cmd := exec.CommandContext(ctx, name, args...)
+	cmd.SysProcAttr = &syscall.SysProcAttr{HideWindow: true}
+	out, err := cmd.CombinedOutput()
+	return string(out), err
+}
+
+func notify(hub *events.Hub, typ, msg string, data interface{}) {
+	if hub == nil {
+		return
+	}
+	hub.Publish(events.Event{Type: typ, Message: msg, Data: data})
+}
+
+func getIPv6AdminState(ifName string) (bool, error) {
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	psCmd := fmt.Sprintf("(Get-NetAdapterBinding -Name '%s' -ComponentID ms_tcpip6 -ErrorAction SilentlyContinue).Enabled -eq $true", ifName)
+	out, err := execWithTimeout(ctx, "powershell", "-NoProfile", "-NonInteractive", "-Command", psCmd)
+	if err == nil {
+		s := strings.TrimSpace(strings.ToLower(out))
+		switch {
+		case strings.Contains(s, "true") || strings.Contains(s, "1"):
+			return true, nil
+		case strings.Contains(s, "false") || strings.Contains(s, "0"):
+			return false, nil
+		}
+	}
+
+	out, err = execWithTimeout(ctx, "netsh", "interface", "ipv6", "show", "interface", ifName)
+	if err != nil && out == "" {
+		return false, err
+	}
+	text := strings.ToLower(out)
+	if strings.Contains(text, "disabled") {
+		return false, nil
+	}
+	if strings.Contains(text, "enabled") {
+		return true, nil
+	}
+	if strings.Contains(text, "admin") && strings.Contains(text, "state") {
+		if strings.Contains(text, "0") {
+			return false, nil
+		}
+	}
+	return false, errors.New("unable to determine ipv6 admin state")
+}
+
+func getAdapterBindingState(ifName, componentID string) (bool, error) {
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	psCmd := fmt.Sprintf("(Get-NetAdapterBinding -Name '%s' -ComponentID %s -ErrorAction SilentlyContinue).Enabled -eq $true", ifName, componentID)
+	out, err := execWithTimeout(ctx, "powershell", "-NoProfile", "-NonInteractive", "-Command", psCmd)
+	if err != nil && out == "" {
+		return false, err
+	}
+	s := strings.TrimSpace(strings.ToLower(out))
+	switch {
+	case strings.Contains(s, "true") || strings.Contains(s, "1"):
+		return true, nil
+	case strings.Contains(s, "false") || strings.Contains(s, "0"):
+		return false, nil
+	default:
+		return false, errors.New("unable to determine adapter binding state")
+	}
+}
+
+func setAdapterBindingState(ifName, componentID string, enabled bool) (string, error) {
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	var psCmd string
+	if enabled {
+		psCmd = fmt.Sprintf("Enable-NetAdapterBinding -Name '%s' -ComponentID %s -Confirm:$false -ErrorAction Stop", ifName, componentID)
+	} else {
+		psCmd = fmt.Sprintf("Disable-NetAdapterBinding -Name '%s' -ComponentID %s -Confirm:$false -ErrorAction Stop", ifName, componentID)
+	}
+	return execWithTimeout(ctx, "powershell", "-NoProfile", "-NonInteractive", "-Command", psCmd)
+}
+
+func applyNetworkMode(ifName, mode string) (string, error) {
+	prevIPv4, _ := getAdapterBindingState(ifName, "ms_tcpip")
+	prevIPv6, _ := getAdapterBindingState(ifName, "ms_tcpip6")
+
+	var ops []struct {
+		componentID string
+		enabled     bool
+	}
+
+	switch mode {
+	case "ipv4":
+		ops = []struct {
+			componentID string
+			enabled     bool
+		}{
+			{componentID: "ms_tcpip", enabled: true},
+			{componentID: "ms_tcpip6", enabled: false},
+		}
+	case "ipv6":
+		ops = []struct {
+			componentID string
+			enabled     bool
+		}{
+			{componentID: "ms_tcpip", enabled: false},
+			{componentID: "ms_tcpip6", enabled: true},
+		}
+	case "both":
+		ops = []struct {
+			componentID string
+			enabled     bool
+		}{
+			{componentID: "ms_tcpip", enabled: true},
+			{componentID: "ms_tcpip6", enabled: true},
+		}
+	default:
+		return "", fmt.Errorf("unknown mode: %s", mode)
+	}
+
+	var outputs []string
+	for _, op := range ops {
+		out, err := setAdapterBindingState(ifName, op.componentID, op.enabled)
+		if err != nil {
+			_, _ = setAdapterBindingState(ifName, "ms_tcpip", prevIPv4)
+			_, _ = setAdapterBindingState(ifName, "ms_tcpip6", prevIPv6)
+			return strings.Join(outputs, "\n"), fmt.Errorf("failed to set %s=%t: %w", op.componentID, op.enabled, err)
+		}
+		if trimmed := strings.TrimSpace(out); trimmed != "" {
+			outputs = append(outputs, trimmed)
+		}
+	}
+
+	if mode == "ipv4" {
+		return strings.Join(outputs, "\n"), nil
+	}
+	return strings.Join(outputs, "\n"), nil
+}
+
+func SwitchStackHandler(hub *events.Hub) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost {
+			writeJSON(w, map[string]string{"error": "method not allowed"}, http.StatusMethodNotAllowed)
+			return
+		}
+
+		var payload struct {
+			IfName string `json:"ifName"`
+			Mode   string `json:"mode"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&payload); err != nil {
+			writeJSON(w, map[string]string{"error": "invalid json"}, http.StatusBadRequest)
+			notify(hub, "switch.error", "invalid request body", nil)
+			return
+		}
+
+		ok, _ := isAdmin()
+		if !ok {
+			writeJSON(w, map[string]string{"error": "admin required"}, http.StatusForbidden)
+			notify(hub, "switch.error", "administrator privilege required", payload)
+			return
+		}
+
+		if payload.Mode != "ipv4" && payload.Mode != "ipv6" && payload.Mode != "both" {
+			writeJSON(w, map[string]string{"error": "unknown mode"}, http.StatusBadRequest)
+			notify(hub, "switch.error", "unknown mode", payload)
+			return
+		}
+
+		prevIPv4, _ := getAdapterBindingState(payload.IfName, "ms_tcpip")
+		prevIPv6, _ := getAdapterBindingState(payload.IfName, "ms_tcpip6")
+
+		out, err := applyNetworkMode(payload.IfName, payload.Mode)
+		if err != nil {
+			rbErr := rollbackNetworkMode(payload.IfName, prevIPv4, prevIPv6)
+			result := map[string]interface{}{
+				"error":          "command failed",
+				"detail":         err.Error(),
+				"output":         out,
+				"rollback_error": fmtError(rbErr),
+			}
+			writeJSON(w, result, http.StatusInternalServerError)
+			notify(hub, "switch.error", "failed to switch network stack", map[string]interface{}{
+				"request":        payload,
+				"detail":         err.Error(),
+				"output":         out,
+				"rollback_error": fmtError(rbErr),
+			})
+			return
+		}
+
+		result := map[string]interface{}{"ok": true, "output": out}
+		writeJSON(w, result, http.StatusOK)
+		notify(hub, "switch.ok", "network stack updated", map[string]interface{}{
+			"request": payload,
+			"output":  strings.TrimSpace(out),
+		})
+	}
+}
+
+func rollbackNetworkMode(ifName string, prevIPv4, prevIPv6 bool) error {
+	if _, err := setAdapterBindingState(ifName, "ms_tcpip", prevIPv4); err != nil {
+		return err
+	}
+	if _, err := setAdapterBindingState(ifName, "ms_tcpip6", prevIPv6); err != nil {
+		return err
+	}
+	return nil
+}
+
+func fmtError(err error) string {
+	if err == nil {
+		return ""
+	}
+	return err.Error()
+}
+
+func WarpHandler(hub *events.Hub) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost {
+			writeJSON(w, map[string]string{"error": "method not allowed"}, http.StatusMethodNotAllowed)
+			return
+		}
+
+		var payload struct {
+			Action string `json:"action"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&payload); err != nil {
+			writeJSON(w, map[string]string{"error": "invalid json"}, http.StatusBadRequest)
+			notify(hub, "warp.error", "invalid request body", nil)
+			return
+		}
+
+		ok, _ := isAdmin()
+		if !ok {
+			writeJSON(w, map[string]string{"error": "admin required"}, http.StatusForbidden)
+			notify(hub, "warp.error", "administrator privilege required", payload)
+			return
+		}
+
+		if _, err := exec.LookPath("warp-cli"); err != nil {
+			writeJSON(w, map[string]string{"error": "warp-cli not found; please install Cloudflare WARP client"}, http.StatusBadRequest)
+			notify(hub, "warp.error", "warp-cli not found", nil)
+			return
+		}
+
+		ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+		defer cancel()
+
+		var out string
+		var err error
+		switch payload.Action {
+		case "start":
+			out, err = execWithTimeout(ctx, "warp-cli", "connect")
+		case "stop":
+			out, err = execWithTimeout(ctx, "warp-cli", "disconnect")
+		default:
+			writeJSON(w, map[string]string{"error": "unknown action"}, http.StatusBadRequest)
+			notify(hub, "warp.error", "unknown action", payload)
+			return
+		}
+
+		if err != nil {
+			result := map[string]interface{}{"error": "warp error", "detail": err.Error(), "output": out}
+			writeJSON(w, result, http.StatusInternalServerError)
+			notify(hub, "warp.error", "failed to update warp state", map[string]interface{}{
+				"request": payload,
+				"detail":  err.Error(),
+				"output":  out,
+			})
+			return
+		}
+
+		result := map[string]interface{}{"ok": true, "output": out}
+		writeJSON(w, result, http.StatusOK)
+		notify(hub, "warp.ok", "warp state updated", map[string]interface{}{
+			"request": payload,
+			"output":  strings.TrimSpace(out),
+		})
+	}
+}
+
+func WSHandler(hub *events.Hub) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		c, err := upgrader.Upgrade(w, r, nil)
+		if err != nil {
+			log.Println("ws upgrade error:", err)
+			return
+		}
+		defer c.Close()
+
+		sub := hub.Subscribe(8)
+		defer hub.Unsubscribe(sub)
+
+		_ = c.WriteJSON(events.Event{Type: "hello", Message: "connected to BKNetwork"})
+		if snap, err := collectNetworkSnapshot(); err == nil {
+			_ = c.WriteJSON(events.Event{Type: "network.status", Message: "network snapshot", Data: snap})
+		}
+		ticker := time.NewTicker(3 * time.Second)
+		defer ticker.Stop()
+
+		for {
+			select {
+			case event, ok := <-sub:
+				if !ok {
+					return
+				}
+				if err := c.WriteJSON(event); err != nil {
+					log.Println("ws write error:", err)
+					return
+				}
+			case <-ticker.C:
+				if snap, err := collectNetworkSnapshot(); err == nil {
+					if err := c.WriteJSON(events.Event{Type: "network.status", Message: "network snapshot", Data: snap}); err != nil {
+						log.Println("ws write error:", err)
+						return
+					}
+				}
+				// keep a lightweight heartbeat for link status
+				if err := c.WriteJSON(events.Event{Type: "heartbeat", Message: "alive"}); err != nil {
+					log.Println("ws write error:", err)
+					return
+				}
+			}
+		}
+	}
+}
+
+func StatusHandler(hub *events.Hub) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		last, hasLast := hub.Snapshot()
+		var lastEvent interface{}
+		if hasLast {
+			lastEvent = last
+		}
+		network, netErr := collectNetworkSnapshot()
+		var netErrMsg string
+		if netErr != nil {
+			netErrMsg = netErr.Error()
+		}
+		writeJSON(w, map[string]interface{}{
+			"service": map[string]interface{}{
+				"name":    "BKNetwork",
+				"version": "dev",
+			},
+			"connection": map[string]interface{}{
+				"websocket": "/ws",
+			},
+			"lastEvent":    lastEvent,
+			"network":      network,
+			"networkError": netErrMsg,
+			"time":         time.Now().Format(time.RFC3339),
+		}, http.StatusOK)
+	}
+}
+
+func isAdmin() (bool, error) {
+	var token windows.Token
+	err := windows.OpenProcessToken(windows.CurrentProcess(), windows.TOKEN_QUERY, &token)
+	if err != nil {
+		return false, err
+	}
+	defer token.Close()
+
+	var elevation uint32
+	var retLen uint32
+	err = windows.GetTokenInformation(token, windows.TokenElevation, (*byte)(unsafe.Pointer(&elevation)), uint32(unsafe.Sizeof(elevation)), &retLen)
+	if err != nil {
+		return false, err
+	}
+	return elevation != 0, nil
+}
