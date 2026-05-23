@@ -5,7 +5,7 @@ BKNetwork 是一个用于 Windows 的轻量级本地后台服务模板，带有�
 
 **下载与安装**
 
-在 Release 页面下载最新版 BKNetwork，可直接运行 `bknetwork.exe`
+在 Release 页面下载最新版 BKNetwork 压缩包，解压后可直接运行 `bknetwork.exe`
 
 **快速上手**
 
