@@ -16,7 +16,9 @@ import (
 	"time"
 	"unsafe"
 
+	"bknetwork/internal/handlers"
 	"bknetwork/internal/server"
+	appsettings "bknetwork/internal/settings"
 
 	"github.com/kardianos/service"
 
@@ -155,6 +157,12 @@ type notifyIconData struct {
 }
 
 func runDesktopApp() error {
+	cfg, err := appsettings.Load()
+	if err != nil {
+		log.Printf("failed to load settings: %v", err)
+		cfg = appsettings.Settings{}
+	}
+
 	trayIcon, err := resolveWebAssetPath("favicon.ico")
 	if err != nil {
 		return err
@@ -180,12 +188,21 @@ func runDesktopApp() error {
 		browserURL: "http://localhost:13335",
 		onExit:     shutdownServer,
 	}
-	tray.onOpen = func() {
-		if waitForLocalServer("127.0.0.1:13335", 10*time.Second) {
-			tray.openBrowser()
-			return
+	if !cfg.SilentStart {
+		tray.onOpen = func() {
+			if waitForLocalServer("127.0.0.1:13335", 10*time.Second) {
+				tray.openBrowser()
+				return
+			}
+			log.Printf("auto open browser skipped: server not ready at %s", tray.browserURL)
 		}
-		log.Printf("auto open browser skipped: server not ready at %s", tray.browserURL)
+	}
+	if cfg.WarpAutoStart {
+		go func() {
+			if err := handlers.StartWarp(); err != nil {
+				log.Printf("warp auto start failed: %v", err)
+			}
+		}()
 	}
 	if err := tray.run(); err != nil {
 		shutdownServer()

@@ -29,6 +29,15 @@ go build -o bknetwork.exe ./cmd/bknetwork
 
 在 Windows 上构建并打包为服务或分发给别的机器时，建议在与目标平台相同的环境中构建（比如使用带有相同 GOOS/GOARCH 的交叉编译或在目标 Windows 主机上构建）。
 
+如果要连同最新前端一起发布，请使用仓库里的发布脚本，它会先同步 `web/` 再构建可分发目录和 zip：
+
+```powershell
+cd BKNetwork
+.\scripts\build-release.ps1
+```
+
+脚本输出的发布目录里会包含 `bknetwork.exe` 和最新的 `web/`，因此程序运行时会自动加载同步后的前端页面。
+
 示例（在非 Windows 上交叉编译 Windows 可执行文件）：
 
 ```bash

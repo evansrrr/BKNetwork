@@ -17,6 +17,7 @@ import (
 	"unsafe"
 
 	"bknetwork/internal/events"
+	appsettings "bknetwork/internal/settings"
 
 	"github.com/gorilla/websocket"
 	"golang.org/x/sys/windows"
@@ -86,6 +87,12 @@ type networkSnapshot struct {
 	AvailableAdapters []string          `json:"availableAdapters"`
 	CloudflareTCP     tcpProbeSnapshot  `json:"cloudflareTcp"`
 	Warp              warpSnapshot      `json:"warp"`
+}
+
+type settingsSnapshot struct {
+	AutoStart     bool `json:"autoStart"`
+	SilentStart   bool `json:"silentStart"`
+	WarpAutoStart bool `json:"warpAutoStart"`
 }
 
 type ipConfigInfo struct {
@@ -758,14 +765,8 @@ func WarpHandler(hub *events.Hub) http.HandlerFunc {
 		ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 		defer cancel()
 
-		var out string
-		var err error
-		switch payload.Action {
-		case "start":
-			out, err = execWithTimeout(ctx, "warp-cli", "connect")
-		case "stop":
-			out, err = execWithTimeout(ctx, "warp-cli", "disconnect")
-		default:
+		out, err := applyWarpAction(ctx, payload.Action)
+		if errors.Is(err, errUnknownWarpAction) {
 			writeJSON(w, map[string]string{"error": "unknown action"}, http.StatusBadRequest)
 			notify(hub, "warp.error", "unknown action", payload)
 			return
@@ -788,6 +789,62 @@ func WarpHandler(hub *events.Hub) http.HandlerFunc {
 			"request": payload,
 			"output":  strings.TrimSpace(out),
 		})
+	}
+}
+
+var errUnknownWarpAction = errors.New("unknown warp action")
+
+func applyWarpAction(ctx context.Context, action string) (string, error) {
+	switch action {
+	case "start":
+		return execWithTimeout(ctx, "warp-cli", "connect")
+	case "stop":
+		return execWithTimeout(ctx, "warp-cli", "disconnect")
+	default:
+		return "", errUnknownWarpAction
+	}
+}
+
+func StartWarp() error {
+	if _, err := exec.LookPath("warp-cli"); err != nil {
+		return err
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+	defer cancel()
+	_, err := applyWarpAction(ctx, "start")
+	return err
+}
+
+func SettingsHandler(hub *events.Hub) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		switch r.Method {
+		case http.MethodGet:
+			cfg, err := appsettings.Load()
+			if err != nil {
+				writeJSON(w, map[string]string{"error": err.Error()}, http.StatusInternalServerError)
+				return
+			}
+			writeJSON(w, settingsSnapshot{AutoStart: cfg.AutoStart, SilentStart: cfg.SilentStart, WarpAutoStart: cfg.WarpAutoStart}, http.StatusOK)
+		case http.MethodPost:
+			var payload settingsSnapshot
+			if err := json.NewDecoder(r.Body).Decode(&payload); err != nil {
+				writeJSON(w, map[string]string{"error": "invalid json"}, http.StatusBadRequest)
+				return
+			}
+			cfg := appsettings.Settings{AutoStart: payload.AutoStart, SilentStart: payload.SilentStart, WarpAutoStart: payload.WarpAutoStart}
+			if err := appsettings.Save(cfg); err != nil {
+				writeJSON(w, map[string]string{"error": err.Error()}, http.StatusInternalServerError)
+				return
+			}
+			if err := appsettings.ApplyStartupShortcut(cfg.AutoStart); err != nil {
+				writeJSON(w, map[string]string{"error": err.Error()}, http.StatusInternalServerError)
+				return
+			}
+			notify(hub, "settings.ok", "settings updated", settingsSnapshot{AutoStart: cfg.AutoStart, SilentStart: cfg.SilentStart, WarpAutoStart: cfg.WarpAutoStart})
+			writeJSON(w, map[string]any{"ok": true, "settings": settingsSnapshot{AutoStart: cfg.AutoStart, SilentStart: cfg.SilentStart, WarpAutoStart: cfg.WarpAutoStart}}, http.StatusOK)
+		default:
+			writeJSON(w, map[string]string{"error": "method not allowed"}, http.StatusMethodNotAllowed)
+		}
 	}
 }
 

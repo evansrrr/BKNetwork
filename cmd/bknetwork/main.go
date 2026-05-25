@@ -7,7 +7,9 @@ import (
 	"os"
 	"time"
 
+	"bknetwork/internal/handlers"
 	"bknetwork/internal/server"
+	appsettings "bknetwork/internal/settings"
 
 	"github.com/kardianos/service"
 )
@@ -27,13 +29,22 @@ func main() {
 		return
 	}
 
+	cfg, err := appsettings.Load()
+	if err != nil {
+		log.Printf("failed to load settings: %v", err)
+		cfg = appsettings.Settings{}
+	}
+	if err := appsettings.ApplyStartupShortcut(cfg.AutoStart); err != nil {
+		log.Printf("failed to sync autostart setting: %v", err)
+	}
+
 	svcConfig := &service.Config{
 		Name:        "BKNetwork",
 		DisplayName: "BKNetwork Service",
 		Description: "Background network helper serving a local web UI on localhost:13335",
 	}
 
-	prg := &program{}
+	prg := &program{settings: cfg}
 	svc, err := service.New(prg, svcConfig)
 	if err != nil {
 		log.Fatal(err)
@@ -80,7 +91,8 @@ func main() {
 }
 
 type program struct {
-	httpSrv *server.Server
+	httpSrv  *server.Server
+	settings appsettings.Settings
 }
 
 func (p *program) Start(s service.Service) error {
@@ -96,6 +108,17 @@ func (p *program) Start(s service.Service) error {
 			}
 		}
 	}()
+	if p.settings.WarpAutoStart {
+		go func() {
+			if err := handlers.StartWarp(); err != nil {
+				if logger != nil {
+					logger.Warning(err)
+				} else {
+					log.Printf("warp auto start failed: %v", err)
+				}
+			}
+		}()
+	}
 	return nil
 }
 

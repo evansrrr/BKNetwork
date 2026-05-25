@@ -161,6 +161,42 @@
       transition: transform 0.2s ease, border-color 0.2s ease, background 0.2s ease;
     }
 
+    .settings-fab {
+      position: fixed;
+      left: 82px;
+      bottom: 18px;
+      z-index: 20;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      width: 54px;
+      height: 54px;
+      border-radius: 18px;
+      border: 1px solid var(--line);
+      background: color-mix(in srgb, var(--bg-elev) 90%, #fff 10%);
+      box-shadow: var(--shadow);
+      backdrop-filter: blur(18px);
+      color: var(--fg);
+      cursor: pointer;
+      transition: transform 0.2s ease, border-color 0.2s ease, background 0.2s ease;
+    }
+
+    .settings-fab:hover {
+      transform: translateY(-2px) scale(1.03);
+      border-color: color-mix(in srgb, var(--accent-2) 30%, var(--line-strong));
+    }
+
+    .settings-fab:focus-visible {
+      outline: 2px solid color-mix(in srgb, var(--accent) 70%, white 30%);
+      outline-offset: 3px;
+    }
+
+    .settings-fab svg {
+      width: 26px;
+      height: 26px;
+      fill: currentColor;
+    }
+
     .github-fab:hover {
       transform: translateY(-2px) scale(1.03);
       border-color: color-mix(in srgb, var(--accent) 30%, var(--line-strong));
@@ -781,6 +817,106 @@
       text-underline-offset: 3px;
     }
 
+    .settings-overlay {
+      position: fixed;
+      inset: 0;
+      z-index: 30;
+      display: none;
+      align-items: center;
+      justify-content: center;
+      padding: 18px;
+      background: rgba(3, 8, 16, 0.5);
+      backdrop-filter: blur(8px);
+    }
+
+    .settings-overlay.open {
+      display: flex;
+    }
+
+    .settings-panel {
+      width: min(720px, 100%);
+      border-radius: 26px;
+      border: 1px solid var(--line);
+      background: var(--bg-elev);
+      box-shadow: 0 34px 80px rgba(0,0,0,0.22);
+      overflow: hidden;
+    }
+
+    .settings-panel header {
+      padding: 22px 22px 18px;
+      border-bottom: 1px solid var(--line);
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
+      gap: 12px;
+    }
+
+    .settings-panel h3 {
+      margin: 0 0 6px;
+      font-size: 22px;
+      letter-spacing: -0.03em;
+    }
+
+    .settings-panel .settings-desc {
+      color: var(--muted);
+      font-size: 13px;
+      line-height: 1.6;
+    }
+
+    .settings-panel .close-btn {
+      width: 40px;
+      height: 40px;
+      border-radius: 12px;
+      padding: 0;
+      background: linear-gradient(135deg, color-mix(in srgb, var(--bg-soft) 82%, #fff), color-mix(in srgb, var(--bg-soft) 58%, #000));
+      color: var(--fg);
+      border: 1px solid var(--line);
+      box-shadow: none;
+    }
+
+    .settings-body {
+      padding: 18px 22px 22px;
+      display: grid;
+      gap: 12px;
+    }
+
+    .setting-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 16px;
+      padding: 16px 18px;
+      border-radius: 18px;
+      border: 1px solid var(--line);
+      background: linear-gradient(180deg, color-mix(in srgb, var(--bg-elev) 88%, #fff 12%), var(--bg-soft));
+    }
+
+    .setting-copy {
+      min-width: 0;
+    }
+
+    .setting-title {
+      font-size: 15px;
+      font-weight: 800;
+      margin-bottom: 4px;
+    }
+
+    .setting-note {
+      color: var(--muted);
+      font-size: 13px;
+      line-height: 1.5;
+    }
+
+    .settings-status {
+      margin-top: 4px;
+      color: var(--accent);
+      font-size: 12px;
+      font-weight: 700;
+      letter-spacing: 0.04em;
+      text-transform: uppercase;
+      min-height: 1.2em;
+    }
+
     @media (max-width: 980px) {
       .hero, .grid, .control-grid { grid-template-columns: 1fr; }
       .log { height: auto; }
@@ -796,9 +932,20 @@
         height: 48px;
         border-radius: 16px;
       }
+      .settings-fab {
+        left: 68px;
+        bottom: 12px;
+        width: 48px;
+        height: 48px;
+        border-radius: 16px;
+      }
       .github-fab img {
         width: 24px;
         height: 24px;
+      }
+      .settings-fab svg {
+        width: 22px;
+        height: 22px;
       }
       .easy-mode-card {
         flex-direction: column;
@@ -822,6 +969,57 @@
       <img src="github-light.svg" alt="GitHub" />
     </picture>
   </a>
+
+  <button class="settings-fab" id="settingsOpenBtn" type="button" aria-label="打开设置面板" title="设置">
+    <svg viewBox="0 0 24 24" aria-hidden="true">
+      <path d="M19.14 12.94c.04-.31.06-.63.06-.94s-.02-.63-.06-.94l2.03-1.58a.5.5 0 0 0 .12-.64l-1.92-3.32a.5.5 0 0 0-.61-.22l-2.39.96a7.1 7.1 0 0 0-1.63-.94l-.36-2.54A.5.5 0 0 0 14.9 2h-3.82a.5.5 0 0 0-.49.42l-.36 2.54c-.58.22-1.12.52-1.63.94l-2.39-.96a.5.5 0 0 0-.61.22L3.68 8.46a.5.5 0 0 0 .12.64l2.03 1.58c-.04.31-.06.63-.06.94s.02.63.06.94l-2.03 1.58a.5.5 0 0 0-.12.64l1.92 3.32a.5.5 0 0 0 .61.22l2.39-.96c.5.42 1.05.76 1.63.94l.36 2.54a.5.5 0 0 0 .49.42h3.82a.5.5 0 0 0 .49-.42l.36-2.54c.58-.18 1.13-.52 1.63-.94l2.39.96a.5.5 0 0 0 .61-.22l1.92-3.32a.5.5 0 0 0-.12-.64l-2.03-1.58ZM12 15.5A3.5 3.5 0 1 1 12 8a3.5 3.5 0 0 1 0 7.5Z"/>
+    </svg>
+  </button>
+
+  <div class="settings-overlay" id="settingsOverlay" aria-hidden="true">
+    <div class="settings-panel" role="dialog" aria-modal="true" aria-labelledby="settingsTitle">
+      <header>
+        <div>
+          <h3 id="settingsTitle">设置</h3>
+          <div class="settings-desc">同一页面内配置 BKNetwork 的开机行为与 WARP 启动偏好。</div>
+        </div>
+        <button class="close-btn" id="settingsCloseBtn" type="button" aria-label="关闭设置">×</button>
+      </header>
+      <div class="settings-body">
+        <div class="setting-row">
+          <div class="setting-copy">
+            <div class="setting-title">BKNetwork 开机自启</div>
+            <div class="setting-note">登录 Windows 后自动启动 BKNetwork，并保留托盘图标。</div>
+          </div>
+          <span class="toggle">
+            <input id="settingAutoStart" type="checkbox" />
+            <span class="toggle-track" aria-hidden="true"></span>
+          </span>
+        </div>
+        <div class="setting-row">
+          <div class="setting-copy">
+            <div class="setting-title">静默启动</div>
+            <div class="setting-note">启动时不自动弹出网页，只保留后台和托盘。</div>
+          </div>
+          <span class="toggle">
+            <input id="settingSilentStart" type="checkbox" />
+            <span class="toggle-track" aria-hidden="true"></span>
+          </span>
+        </div>
+        <div class="setting-row">
+          <div class="setting-copy">
+            <div class="setting-title">Cloudflare WARP 开机自启</div>
+            <div class="setting-note">启动 BKNetwork 时自动执行 WARP 连接，保持免流状态。</div>
+          </div>
+          <span class="toggle">
+            <input id="settingWarpAutoStart" type="checkbox" />
+            <span class="toggle-track" aria-hidden="true"></span>
+          </span>
+        </div>
+        <div class="settings-status" id="settingsStatus">未加载</div>
+      </div>
+    </div>
+  </div>
 
   <main class="shell">
     <section class="hero">
@@ -987,6 +1185,13 @@
     const warpStateEl = document.getElementById('warpState');
     const easyModeToggleEl = document.getElementById('easyModeToggle');
     const easyModeStateEl = document.getElementById('easyModeState');
+    const settingsOpenBtn = document.getElementById('settingsOpenBtn');
+    const settingsOverlayEl = document.getElementById('settingsOverlay');
+    const settingsCloseBtn = document.getElementById('settingsCloseBtn');
+    const settingAutoStartEl = document.getElementById('settingAutoStart');
+    const settingSilentStartEl = document.getElementById('settingSilentStart');
+    const settingWarpAutoStartEl = document.getElementById('settingWarpAutoStart');
+    const settingsStatusEl = document.getElementById('settingsStatus');
     const stackModeStateEl = document.getElementById('stackModeState');
     const lastResultEl = document.getElementById('lastResult');
     const lastUpdatedEl = document.getElementById('lastUpdated');
@@ -1003,6 +1208,12 @@
     const badgeState = {
       network: { stable: null, pending: null },
       warp: { stable: null, pending: null },
+    };
+    const settingsState = {
+      autoStart: false,
+      silentStart: false,
+      warpAutoStart: false,
+      saving: false,
     };
 
     function setTargetAdapter(value) {
@@ -1119,6 +1330,69 @@
     function setText(el, value) {
       if (el) {
         el.textContent = value;
+      }
+    }
+
+    function setSettingsStatus(value) {
+      setText(settingsStatusEl, value);
+    }
+
+    function syncSettingsControls() {
+      if (settingAutoStartEl) settingAutoStartEl.checked = !!settingsState.autoStart;
+      if (settingSilentStartEl) settingSilentStartEl.checked = !!settingsState.silentStart;
+      if (settingWarpAutoStartEl) settingWarpAutoStartEl.checked = !!settingsState.warpAutoStart;
+    }
+
+    function setSettingsOpen(open) {
+      if (!settingsOverlayEl) return;
+      settingsOverlayEl.classList.toggle('open', !!open);
+      settingsOverlayEl.setAttribute('aria-hidden', String(!open));
+      if (open) {
+        syncSettingsControls();
+      }
+    }
+
+    async function loadSettings() {
+      try {
+        const res = await fetch('/api/v1/settings');
+        const data = await res.json();
+        settingsState.autoStart = !!data.autoStart;
+        settingsState.silentStart = !!data.silentStart;
+        settingsState.warpAutoStart = !!data.warpAutoStart;
+        syncSettingsControls();
+        setSettingsStatus('已加载');
+      } catch (err) {
+        setSettingsStatus(`加载失败：${err.message}`);
+      }
+    }
+
+    async function saveSettings() {
+      if (settingsState.saving) {
+        return;
+      }
+      settingsState.saving = true;
+      setSettingsStatus('正在保存...');
+      try {
+        const res = await fetch('/api/v1/settings', {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({
+            autoStart: !!settingsState.autoStart,
+            silentStart: !!settingsState.silentStart,
+            warpAutoStart: !!settingsState.warpAutoStart,
+          }),
+        });
+        const data = await res.json();
+        if (!res.ok) {
+          throw new Error(data.error || 'request failed');
+        }
+        setSettingsStatus('已保存');
+        appendLog('设置已保存');
+      } catch (err) {
+        setSettingsStatus(`保存失败：${err.message}`);
+        appendLog(`设置保存失败：${err.message}`);
+      } finally {
+        settingsState.saving = false;
       }
     }
 
@@ -1553,8 +1827,52 @@
       });
     }
 
+    if (settingsOpenBtn) {
+      settingsOpenBtn.addEventListener('click', () => setSettingsOpen(true));
+    }
+
+    if (settingsCloseBtn) {
+      settingsCloseBtn.addEventListener('click', () => setSettingsOpen(false));
+    }
+
+    if (settingsOverlayEl) {
+      settingsOverlayEl.addEventListener('click', (event) => {
+        if (event.target === settingsOverlayEl) {
+          setSettingsOpen(false);
+        }
+      });
+    }
+
+    if (settingAutoStartEl) {
+      settingAutoStartEl.addEventListener('change', () => {
+        settingsState.autoStart = settingAutoStartEl.checked;
+        saveSettings();
+      });
+    }
+
+    if (settingSilentStartEl) {
+      settingSilentStartEl.addEventListener('change', () => {
+        settingsState.silentStart = settingSilentStartEl.checked;
+        saveSettings();
+      });
+    }
+
+    if (settingWarpAutoStartEl) {
+      settingWarpAutoStartEl.addEventListener('change', () => {
+        settingsState.warpAutoStart = settingWarpAutoStartEl.checked;
+        saveSettings();
+      });
+    }
+
+    window.addEventListener('keydown', (event) => {
+      if (event.key === 'Escape') {
+        setSettingsOpen(false);
+      }
+    });
+
     setAdvancedMode(false);
 
+    loadSettings();
     refreshStatus(true);
     refreshTrafficUsage();
     setInterval(refreshTrafficUsage, 60000);
