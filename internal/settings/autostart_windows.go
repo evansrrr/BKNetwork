@@ -13,9 +13,19 @@ import (
 const (
 	autostartRegistryPath = `Software\Microsoft\Windows\CurrentVersion\Run`
 	autostartValueName    = "BKNetwork"
+	warpAutoStartName     = "Cloudflare WARP"
+	warpAppExePath        = `C:\Program Files\Cloudflare\Cloudflare WARP\Cloudflare WARP.exe`
 )
 
 func ApplyStartupShortcut(enabled bool) error {
+	return applyStartupShortcut(autostartValueName, currentExecutableCommand(), enabled)
+}
+
+func ApplyWarpAppStartupShortcut(enabled bool) error {
+	return applyStartupShortcut(warpAutoStartName, fmt.Sprintf("%q", warpAppExePath), enabled)
+}
+
+func applyStartupShortcut(valueName, command string, enabled bool) error {
 	key, _, err := registry.CreateKey(registry.CURRENT_USER, autostartRegistryPath, registry.SET_VALUE)
 	if err != nil {
 		return err
@@ -23,20 +33,24 @@ func ApplyStartupShortcut(enabled bool) error {
 	defer key.Close()
 
 	if !enabled {
-		if err := key.DeleteValue(autostartValueName); err != nil && !isMissingValueError(err) {
+		if err := key.DeleteValue(valueName); err != nil && !isMissingValueError(err) {
 			return err
 		}
 		return nil
 	}
 
+	if strings.TrimSpace(command) == "" {
+		return fmt.Errorf("empty startup command")
+	}
+	return key.SetStringValue(valueName, command)
+}
+
+func currentExecutableCommand() string {
 	exePath, err := os.Executable()
-	if err != nil {
-		return err
+	if err != nil || strings.TrimSpace(exePath) == "" {
+		return ""
 	}
-	if strings.TrimSpace(exePath) == "" {
-		return fmt.Errorf("empty executable path")
-	}
-	return key.SetStringValue(autostartValueName, fmt.Sprintf("%q", exePath))
+	return fmt.Sprintf("%q", exePath)
 }
 
 func isMissingValueError(err error) bool {

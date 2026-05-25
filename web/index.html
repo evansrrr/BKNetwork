@@ -233,6 +233,7 @@
       opacity: 0;
       margin: 0;
       cursor: pointer;
+      z-index: 2;
     }
 
     .toggle-track {
@@ -244,6 +245,7 @@
       box-shadow: inset 0 1px 2px rgba(0,0,0,0.08);
       position: relative;
       transition: background 0.2s ease, border-color 0.2s ease;
+      pointer-events: none;
     }
 
     .toggle-track::after {
@@ -1008,11 +1010,11 @@
         </div>
         <div class="setting-row">
           <div class="setting-copy">
-            <div class="setting-title">Cloudflare WARP 开机自启</div>
-            <div class="setting-note">启动 BKNetwork 时自动执行 WARP 连接，保持免流状态。</div>
+            <div class="setting-title">Cloudflare WARP 程序开机自启</div>
+            <div class="setting-note">登录 Windows 后自动启动 Cloudflare WARP 客户端本体，不会自动连接。</div>
           </div>
           <span class="toggle">
-            <input id="settingWarpAutoStart" type="checkbox" />
+            <input id="settingWarpAppAutoStart" type="checkbox" />
             <span class="toggle-track" aria-hidden="true"></span>
           </span>
         </div>
@@ -1191,6 +1193,7 @@
     const settingAutoStartEl = document.getElementById('settingAutoStart');
     const settingSilentStartEl = document.getElementById('settingSilentStart');
     const settingWarpAutoStartEl = document.getElementById('settingWarpAutoStart');
+    const settingWarpAppAutoStartEl = document.getElementById('settingWarpAppAutoStart');
     const settingsStatusEl = document.getElementById('settingsStatus');
     const stackModeStateEl = document.getElementById('stackModeState');
     const lastResultEl = document.getElementById('lastResult');
@@ -1213,6 +1216,7 @@
       autoStart: false,
       silentStart: false,
       warpAutoStart: false,
+      warpAppAutoStart: false,
       saving: false,
     };
 
@@ -1341,6 +1345,7 @@
       if (settingAutoStartEl) settingAutoStartEl.checked = !!settingsState.autoStart;
       if (settingSilentStartEl) settingSilentStartEl.checked = !!settingsState.silentStart;
       if (settingWarpAutoStartEl) settingWarpAutoStartEl.checked = !!settingsState.warpAutoStart;
+      if (settingWarpAppAutoStartEl) settingWarpAppAutoStartEl.checked = !!settingsState.warpAppAutoStart;
     }
 
     function setSettingsOpen(open) {
@@ -1354,16 +1359,23 @@
 
     async function loadSettings() {
       try {
+        setSettingsStatus('正在检查...');
         const res = await fetch('/api/v1/settings');
         const data = await res.json();
         settingsState.autoStart = !!data.autoStart;
         settingsState.silentStart = !!data.silentStart;
         settingsState.warpAutoStart = !!data.warpAutoStart;
+        settingsState.warpAppAutoStart = !!data.warpAppAutoStart;
         syncSettingsControls();
         setSettingsStatus('已加载');
       } catch (err) {
         setSettingsStatus(`加载失败：${err.message}`);
       }
+    }
+
+    async function openSettingsPanel() {
+      await loadSettings();
+      setSettingsOpen(true);
     }
 
     async function saveSettings() {
@@ -1380,6 +1392,7 @@
             autoStart: !!settingsState.autoStart,
             silentStart: !!settingsState.silentStart,
             warpAutoStart: !!settingsState.warpAutoStart,
+            warpAppAutoStart: !!settingsState.warpAppAutoStart,
           }),
         });
         const data = await res.json();
@@ -1828,7 +1841,9 @@
     }
 
     if (settingsOpenBtn) {
-      settingsOpenBtn.addEventListener('click', () => setSettingsOpen(true));
+      settingsOpenBtn.addEventListener('click', () => {
+        openSettingsPanel().catch(() => {});
+      });
     }
 
     if (settingsCloseBtn) {
@@ -1860,6 +1875,13 @@
     if (settingWarpAutoStartEl) {
       settingWarpAutoStartEl.addEventListener('change', () => {
         settingsState.warpAutoStart = settingWarpAutoStartEl.checked;
+        saveSettings();
+      });
+    }
+
+    if (settingWarpAppAutoStartEl) {
+      settingWarpAppAutoStartEl.addEventListener('change', () => {
+        settingsState.warpAppAutoStart = settingWarpAppAutoStartEl.checked;
         saveSettings();
       });
     }

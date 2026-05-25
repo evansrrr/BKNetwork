@@ -8,9 +8,10 @@ import (
 )
 
 type Settings struct {
-	AutoStart     bool `json:"autoStart"`
-	SilentStart   bool `json:"silentStart"`
-	WarpAutoStart bool `json:"warpAutoStart"`
+	AutoStart        bool `json:"autoStart"`
+	SilentStart      bool `json:"silentStart"`
+	WarpAutoStart    bool `json:"warpAutoStart"`
+	WarpAppAutoStart bool `json:"warpAppAutoStart"`
 }
 
 var mu sync.Mutex
