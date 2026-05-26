@@ -80,13 +80,21 @@ type warpSnapshot struct {
 	Error     string `json:"error,omitempty"`
 }
 
+type warpSettingsSnapshot struct {
+	CheckedAt      string `json:"checkedAt"`
+	Mode           string `json:"mode,omitempty"`
+	TunnelProtocol string `json:"tunnelProtocol,omitempty"`
+	Error          string `json:"error,omitempty"`
+}
+
 type networkSnapshot struct {
-	CollectedAt       string            `json:"collectedAt"`
-	Online            bool              `json:"online"`
-	Adapters          []adapterSnapshot `json:"adapters"`
-	AvailableAdapters []string          `json:"availableAdapters"`
-	CloudflareTCP     tcpProbeSnapshot  `json:"cloudflareTcp"`
-	Warp              warpSnapshot      `json:"warp"`
+	CollectedAt       string               `json:"collectedAt"`
+	Online            bool                 `json:"online"`
+	Adapters          []adapterSnapshot    `json:"adapters"`
+	AvailableAdapters []string             `json:"availableAdapters"`
+	CloudflareTCP     tcpProbeSnapshot     `json:"cloudflareTcp"`
+	Warp              warpSnapshot         `json:"warp"`
+	WarpSettings      warpSettingsSnapshot `json:"warpSettings"`
 }
 
 type settingsSnapshot struct {
@@ -186,22 +194,23 @@ func collectNetworkSnapshot() (networkSnapshot, error) {
 	defer cancel()
 
 	var (
-		basicRaw   string
-		basicErr   error
-		bindingRaw string
-		bindingErr error
-		ipCfgRaw   string
-		ipCfgErr   error
-		dnsRaw     string
-		dnsErr     error
-		defaultV4  []string
-		defaultV6  []string
-		warpStatus warpSnapshot
-		tcpProbe   tcpProbeSnapshot
+		basicRaw     string
+		basicErr     error
+		bindingRaw   string
+		bindingErr   error
+		ipCfgRaw     string
+		ipCfgErr     error
+		dnsRaw       string
+		dnsErr       error
+		defaultV4    []string
+		defaultV6    []string
+		warpStatus   warpSnapshot
+		warpSettings warpSettingsSnapshot
+		tcpProbe     tcpProbeSnapshot
 	)
 
 	var wg sync.WaitGroup
-	wg.Add(8)
+	wg.Add(9)
 	go func() {
 		defer wg.Done()
 		basicCmd := "Get-NetAdapter | Select-Object Name, Status, MacAddress, InterfaceDescription | ConvertTo-Json -Compress"
@@ -233,6 +242,10 @@ func collectNetworkSnapshot() (networkSnapshot, error) {
 	go func() {
 		defer wg.Done()
 		warpStatus = probeWarpStatus(ctx)
+	}()
+	go func() {
+		defer wg.Done()
+		warpSettings = probeWarpSettings(ctx)
 	}()
 	go func() {
 		defer wg.Done()
@@ -419,6 +432,7 @@ func collectNetworkSnapshot() (networkSnapshot, error) {
 		AvailableAdapters: availableAdapters,
 		CloudflareTCP:     tcpProbe,
 		Warp:              warpStatus,
+		WarpSettings:      warpSettings,
 	}, nil
 }
 
@@ -465,6 +479,35 @@ func probeWarpStatus(ctx context.Context) warpSnapshot {
 	}
 	result.Connected = parseWarpConnected(result.Raw)
 	return result
+}
+
+func probeWarpSettings(ctx context.Context) warpSettingsSnapshot {
+	result := warpSettingsSnapshot{CheckedAt: time.Now().Format(time.RFC3339)}
+	out, err := execWithTimeout(ctx, "warp-cli", "settings")
+	raw := strings.TrimSpace(out)
+	if err != nil && raw == "" {
+		result.Error = err.Error()
+		return result
+	}
+	result.Mode = parseWarpSettingsValue(raw, "Mode")
+	result.TunnelProtocol = parseWarpSettingsValue(raw, "WARP tunnel protocol")
+	return result
+}
+
+func parseWarpSettingsValue(raw, key string) string {
+	needle := key + ":"
+	for _, line := range strings.Split(raw, "\n") {
+		line = strings.TrimSpace(strings.TrimPrefix(line, "\ufeff"))
+		idx := strings.Index(line, needle)
+		if idx < 0 {
+			continue
+		}
+		value := strings.TrimSpace(line[idx+len(needle):])
+		if value != "" {
+			return value
+		}
+	}
+	return ""
 }
 
 func parseWarpConnected(raw string) bool {
