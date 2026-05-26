@@ -22,6 +22,10 @@
       --success: #15803d;
       --warn: #b45309;
       --shadow: 0 24px 60px rgba(15,23,42,0.10);
+      --card-surface: #ffffff;
+      --card-surface-strong: #ffffff;
+      --card-shadow-soft: 0 12px 30px rgba(15,23,42,0.08);
+      --card-shadow-strong: 0 16px 36px rgba(15,23,42,0.12);
     }
 
     @media (prefers-color-scheme: dark) {
@@ -40,6 +44,10 @@
         --success: #4ade80;
         --warn: #f59e0b;
         --shadow: 0 20px 50px rgba(0,0,0,0.40);
+        --card-surface: color-mix(in srgb, var(--bg-elev) 90%, #ffffff 10%);
+        --card-surface-strong: color-mix(in srgb, var(--bg-elev) 84%, #ffffff 16%);
+        --card-shadow-soft: 0 16px 36px rgba(0,0,0,0.38);
+        --card-shadow-strong: 0 20px 44px rgba(0,0,0,0.46);
       }
     }
 
@@ -88,6 +96,30 @@
       background-repeat: no-repeat;
       background-size: cover;
       opacity: 0.65;
+    }
+
+    body * {
+      cursor: default;
+    }
+
+    button,
+    button *,
+    a,
+    a *,
+    .toggle,
+    .toggle *,
+    .github-fab,
+    .github-fab *,
+    .settings-fab,
+    .settings-fab *,
+    .mini-link,
+    .mini-link * {
+      cursor: pointer;
+    }
+
+    input[type="text"],
+    textarea {
+      cursor: text;
     }
 
     .shell {
@@ -289,9 +321,9 @@
       gap: 16px;
       padding: 16px 18px;
       border-radius: 18px;
-      border: 1px solid var(--line);
-      background: linear-gradient(180deg, color-mix(in srgb, var(--bg-elev) 86%, #fff 14%), var(--bg-soft));
-      box-shadow: 0 12px 32px rgba(0,0,0,0.05);
+      border: 1px solid color-mix(in srgb, var(--line-strong) 72%, transparent);
+      background: var(--card-surface);
+      box-shadow: var(--card-shadow-soft), inset 0 1px 0 rgba(255,255,255,0.16);
     }
 
     .easy-mode-dns64-card {
@@ -302,9 +334,9 @@
       margin-top: 12px;
       padding: 16px 18px;
       border-radius: 18px;
-      border: 1px solid var(--line);
-      background: linear-gradient(180deg, color-mix(in srgb, var(--bg-elev) 86%, #fff 14%), var(--bg-soft));
-      box-shadow: 0 12px 32px rgba(0,0,0,0.05);
+      border: 1px solid color-mix(in srgb, var(--line-strong) 72%, transparent);
+      background: var(--card-surface);
+      box-shadow: var(--card-shadow-soft), inset 0 1px 0 rgba(255,255,255,0.16);
     }
 
     .easy-mode-title {
@@ -540,9 +572,9 @@
       width: 100%;
       padding: 12px 14px;
       color: var(--fg);
-      background: linear-gradient(180deg, color-mix(in srgb, var(--bg-elev) 88%, #fff 12%), var(--bg-soft));
-      border: 1px solid var(--line);
-      box-shadow: none;
+      background: var(--card-surface);
+      border: 1px solid color-mix(in srgb, var(--line-strong) 72%, transparent);
+      box-shadow: inset 0 1px 0 rgba(255,255,255,0.16);
     }
 
     .mode-option::after {
@@ -561,7 +593,8 @@
 
     .mode-option.active {
       border-color: color-mix(in srgb, var(--accent-2) 44%, var(--line));
-      background: linear-gradient(180deg, color-mix(in srgb, var(--accent-2) 18%, var(--bg-elev)), var(--bg-soft));
+      background: var(--card-surface-strong);
+      box-shadow: var(--card-shadow-strong), inset 0 1px 0 rgba(255,255,255,0.18);
     }
 
     .mode-option.active .mode-dot {
@@ -587,9 +620,9 @@
       gap: 16px;
       padding: 16px 18px;
       border-radius: 18px;
-      border: 1px solid var(--line);
-      background: linear-gradient(180deg, color-mix(in srgb, var(--bg-elev) 86%, #fff 14%), var(--bg-soft));
-      box-shadow: 0 12px 32px rgba(0,0,0,0.05);
+      border: 1px solid color-mix(in srgb, var(--line-strong) 72%, transparent);
+      background: var(--card-surface);
+      box-shadow: var(--card-shadow-soft), inset 0 1px 0 rgba(255,255,255,0.16);
       cursor: pointer;
     }
 
@@ -661,14 +694,14 @@
       height: 310px;
       overflow: auto;
       border-radius: 18px;
-      border: 1px solid var(--line);
-      background: linear-gradient(180deg, color-mix(in srgb, var(--bg-elev) 80%, #fff 20%), rgba(0,0,0,0.05));
+      border: 1px solid color-mix(in srgb, var(--line-strong) 72%, transparent);
+      background: var(--card-surface);
       padding: 14px;
       font-family: Consolas, "Cascadia Mono", "SFMono-Regular", monospace;
       font-size: 12px;
       line-height: 1.55;
       white-space: pre-wrap;
-      box-shadow: inset 0 1px 0 rgba(255,255,255,0.04);
+      box-shadow: var(--card-shadow-soft), inset 0 1px 0 rgba(255,255,255,0.12);
     }
 
     .adapter-list {
@@ -680,19 +713,19 @@
 
     .adapter-card {
       border-radius: 18px;
-      border: 1px solid var(--line);
-      background: linear-gradient(180deg, color-mix(in srgb, var(--bg-elev) 86%, #fff 14%), var(--bg-soft));
+      border: 1px solid color-mix(in srgb, var(--line-strong) 72%, transparent);
+      background: var(--card-surface);
       padding: 14px;
       display: grid;
       gap: 8px;
-      box-shadow: 0 12px 30px rgba(0,0,0,0.04);
+      box-shadow: var(--card-shadow-soft), inset 0 1px 0 rgba(255,255,255,0.16);
       transition: transform .18s ease, box-shadow .18s ease, border-color .18s ease;
     }
 
     .adapter-card:hover {
       transform: translateY(-2px);
       border-color: var(--line-strong);
-      box-shadow: 0 18px 40px rgba(0,0,0,0.07);
+      box-shadow: var(--card-shadow-strong), inset 0 1px 0 rgba(255,255,255,0.18);
     }
 
     .adapter-head {
@@ -824,8 +857,9 @@
     .control-card {
       padding: 16px;
       border-radius: 18px;
-      border: 1px solid var(--line);
-      background: linear-gradient(180deg, color-mix(in srgb, var(--bg-elev) 86%, #fff 14%), var(--bg-soft));
+      border: 1px solid color-mix(in srgb, var(--line-strong) 72%, transparent);
+      background: var(--card-surface);
+      box-shadow: inset 0 1px 0 rgba(255,255,255,0.16);
     }
 
     .control-label {
@@ -1050,7 +1084,7 @@
     /* Improve contrast for adapter list and ip-block in light theme */
     @media (prefers-color-scheme: light) {
       .adapter-card {
-        background: linear-gradient(180deg, color-mix(in srgb, var(--bg-elev) 96%, #fff 4%), color-mix(in srgb, var(--bg-soft) 90%, var(--bg-elev)));
+        background: #ffffff;
         border-color: color-mix(in srgb, var(--accent) 6%, var(--line));
         box-shadow: 0 12px 30px rgba(15,23,42,0.06);
       }
@@ -1063,6 +1097,13 @@
         background: color-mix(in srgb, var(--bg-elev) 94%, #fff 6%);
         border: 1px solid color-mix(in srgb, var(--line) 88%, rgba(0,0,0,0.06));
         color: color-mix(in srgb, var(--fg) 84%, var(--muted));
+      }
+
+      .settings-panel .close-btn {
+        background: #ffffff;
+        border-color: color-mix(in srgb, var(--accent-2) 14%, var(--line));
+        color: color-mix(in srgb, var(--fg) 90%, var(--accent-2));
+        box-shadow: 0 10px 22px rgba(15,23,42,0.08);
       }
     }
 
@@ -1101,10 +1142,10 @@
       height: 40px;
       border-radius: 12px;
       padding: 0;
-      background: linear-gradient(135deg, color-mix(in srgb, var(--bg-soft) 82%, #fff), color-mix(in srgb, var(--bg-soft) 58%, #000));
+      background: var(--card-surface);
       color: var(--fg);
-      border: 1px solid var(--line);
-      box-shadow: none;
+      border: 1px solid color-mix(in srgb, var(--line-strong) 72%, transparent);
+      box-shadow: var(--card-shadow-soft);
     }
 
     .settings-body {
