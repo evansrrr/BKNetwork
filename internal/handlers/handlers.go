@@ -832,18 +832,27 @@ func SettingsHandler(hub *events.Hub) http.HandlerFunc {
 				writeJSON(w, map[string]string{"error": "invalid json"}, http.StatusBadRequest)
 				return
 			}
+			prevCfg, err := appsettings.Load()
+			if err != nil {
+				writeJSON(w, map[string]string{"error": err.Error()}, http.StatusInternalServerError)
+				return
+			}
 			cfg := appsettings.Settings{AutoStart: payload.AutoStart, SilentStart: payload.SilentStart, WarpAutoStart: payload.WarpAutoStart, WarpAppAutoStart: payload.WarpAppAutoStart}
 			if err := appsettings.Save(cfg); err != nil {
 				writeJSON(w, map[string]string{"error": err.Error()}, http.StatusInternalServerError)
 				return
 			}
-			if err := appsettings.ApplyStartupShortcut(cfg.AutoStart); err != nil {
-				writeJSON(w, map[string]string{"error": err.Error()}, http.StatusInternalServerError)
-				return
+			if prevCfg.AutoStart != cfg.AutoStart {
+				if err := appsettings.ApplyStartupShortcut(cfg.AutoStart); err != nil {
+					writeJSON(w, map[string]string{"error": err.Error()}, http.StatusInternalServerError)
+					return
+				}
 			}
-			if err := appsettings.ApplyWarpAppStartupShortcut(cfg.WarpAppAutoStart); err != nil {
-				writeJSON(w, map[string]string{"error": err.Error()}, http.StatusInternalServerError)
-				return
+			if prevCfg.WarpAppAutoStart != cfg.WarpAppAutoStart {
+				if err := appsettings.ApplyWarpAppStartupShortcut(cfg.WarpAppAutoStart); err != nil {
+					writeJSON(w, map[string]string{"error": err.Error()}, http.StatusInternalServerError)
+					return
+				}
 			}
 			notify(hub, "settings.ok", "settings updated", settingsSnapshot{AutoStart: cfg.AutoStart, SilentStart: cfg.SilentStart, WarpAutoStart: cfg.WarpAutoStart, WarpAppAutoStart: cfg.WarpAppAutoStart})
 			writeJSON(w, map[string]any{"ok": true, "settings": settingsSnapshot{AutoStart: cfg.AutoStart, SilentStart: cfg.SilentStart, WarpAutoStart: cfg.WarpAutoStart, WarpAppAutoStart: cfg.WarpAppAutoStart}}, http.StatusOK)

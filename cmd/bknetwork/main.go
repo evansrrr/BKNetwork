@@ -17,16 +17,18 @@ import (
 var logger service.Logger
 
 func main() {
-	relaunched, err := ensureElevatedAtStartup()
-	if err != nil {
-		if errors.Is(err, errElevationCanceled) {
-			log.Println("UAC 提权已取消，程序退出")
+	if !hasStartupNoElevateArg() {
+		relaunched, err := ensureElevatedAtStartup()
+		if err != nil {
+			if errors.Is(err, errElevationCanceled) {
+				log.Println("UAC 提权已取消，程序退出")
+				return
+			}
+			log.Fatalf("failed to request administrator privileges: %v", err)
+		}
+		if relaunched {
 			return
 		}
-		log.Fatalf("failed to request administrator privileges: %v", err)
-	}
-	if relaunched {
-		return
 	}
 
 	cfg, err := appsettings.Load()
@@ -88,6 +90,15 @@ func main() {
 			log.Fatal(error)
 		}
 	}
+}
+
+func hasStartupNoElevateArg() bool {
+	for _, arg := range os.Args[1:] {
+		if arg == appsettings.StartupNoElevateArg {
+			return true
+		}
+	}
+	return false
 }
 
 type program struct {

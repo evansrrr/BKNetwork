@@ -115,14 +115,6 @@
       overflow: clip;
     }
 
-    .panel::after {
-      content: '';
-      display: block;
-      height: 1px;
-      background: linear-gradient(90deg, transparent, color-mix(in srgb, var(--accent) 35%, transparent), transparent);
-      opacity: 0.7;
-    }
-
     .mode-switch {
       position: fixed;
       top: 18px;
@@ -214,9 +206,11 @@
     }
 
     .mode-switch .label {
-      color: var(--muted);
+      color: var(--fg);
       font-weight: 700;
-      letter-spacing: 0.04em;
+      letter-spacing: 0.05em;
+      text-transform: uppercase;
+      font-size: 12px;
     }
 
     .toggle {
@@ -346,7 +340,7 @@
       letter-spacing: 0.14em;
       text-transform: uppercase;
       font-size: 12px;
-      color: var(--accent);
+      color: color-mix(in srgb, var(--accent) 78%, var(--fg));
       font-weight: 800;
     }
 
@@ -377,11 +371,31 @@
       align-items: center;
       gap: 8px;
       padding: 9px 12px;
-      border: 1px solid var(--line);
+      border: 1px solid color-mix(in srgb, var(--accent-2) 18%, var(--line));
       border-radius: 999px;
-      background: linear-gradient(180deg, color-mix(in srgb, var(--bg-elev) 88%, #fff 12%), var(--bg-soft));
+      background:
+        linear-gradient(180deg, color-mix(in srgb, var(--accent-2) 10%, var(--bg-elev)), color-mix(in srgb, var(--bg-soft) 74%, var(--bg-elev)));
+      color: color-mix(in srgb, var(--fg) 92%, var(--accent-2) 8%);
       font-size: 13px;
-      box-shadow: 0 8px 24px rgba(0,0,0,0.04);
+      box-shadow: 0 10px 26px rgba(0,0,0,0.05);
+      backdrop-filter: blur(10px);
+    }
+
+    .mini .label {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      width: fit-content;
+      padding: 4px 8px;
+      margin-bottom: 6px;
+      border-radius: 999px;
+      border: 1px solid color-mix(in srgb, var(--accent) 30%, var(--line));
+      background: color-mix(in srgb, var(--accent) 16%, var(--bg-elev));
+      color: color-mix(in srgb, var(--accent) 88%, var(--fg));
+      font-size: 12px;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      box-shadow: 0 8px 18px rgba(0,0,0,0.04);
     }
 
     .dot {
@@ -422,14 +436,6 @@
       transform: translateY(-1px);
       border-color: var(--line-strong);
       box-shadow: 0 14px 32px rgba(0,0,0,0.07);
-    }
-
-    .mini .label {
-      color: var(--muted);
-      font-size: 12px;
-      margin-bottom: 6px;
-      text-transform: uppercase;
-      letter-spacing: 0.08em;
     }
 
     .mini .value {
@@ -692,10 +698,10 @@
     .pill {
       padding: 3px 9px;
       border-radius: 999px;
-      border: 1px solid var(--line);
+      border: 1px solid color-mix(in srgb, var(--accent-2) 14%, var(--line));
       font-size: 11px;
-      color: var(--muted);
-      background: rgba(255,255,255,0.04);
+      color: color-mix(in srgb, var(--fg) 70%, var(--muted));
+      background: color-mix(in srgb, var(--accent-2) 8%, var(--bg-elev));
     }
 
     .adapter-meta {
@@ -714,8 +720,9 @@
       font-size: 12px;
       border-radius: 999px;
       padding: 5px 9px;
-      border: 1px solid var(--line);
-      background: rgba(0,0,0,0.08);
+      border: 1px solid color-mix(in srgb, var(--accent-2) 12%, var(--line));
+      background: color-mix(in srgb, var(--accent-2) 6%, var(--bg-elev));
+      color: color-mix(in srgb, var(--fg) 74%, var(--muted));
     }
 
     .stack-pill.on {
@@ -726,6 +733,38 @@
     .stack-pill.off {
       border-color: color-mix(in srgb, var(--danger) 45%, var(--line));
       color: var(--danger);
+    }
+
+    @media (prefers-color-scheme: dark) {
+      .mode-switch .label {
+        color: color-mix(in srgb, var(--fg) 92%, var(--accent));
+      }
+
+      .badge {
+        border-color: color-mix(in srgb, var(--accent-2) 24%, var(--line));
+        background:
+          linear-gradient(180deg, color-mix(in srgb, var(--accent-2) 14%, var(--bg-elev)), color-mix(in srgb, var(--bg-soft) 80%, var(--bg-elev)));
+        box-shadow: 0 12px 30px rgba(0,0,0,0.16);
+      }
+
+      .mini .label {
+        border-color: color-mix(in srgb, var(--accent) 34%, var(--line));
+        background: color-mix(in srgb, var(--accent) 22%, var(--bg-elev));
+        color: color-mix(in srgb, var(--accent) 94%, white 6%);
+        box-shadow: 0 10px 22px rgba(0,0,0,0.18);
+      }
+
+      .pill {
+        border-color: color-mix(in srgb, var(--accent-2) 22%, var(--line));
+        background: color-mix(in srgb, var(--accent-2) 12%, var(--bg-elev));
+        color: color-mix(in srgb, var(--fg) 82%, var(--muted));
+      }
+
+      .stack-pill {
+        border-color: color-mix(in srgb, var(--accent-2) 18%, var(--line));
+        background: color-mix(in srgb, var(--accent-2) 10%, var(--bg-elev));
+        color: color-mix(in srgb, var(--fg) 82%, var(--muted));
+      }
     }
 
     .ip-block {
@@ -819,20 +858,136 @@
       text-underline-offset: 3px;
     }
 
+    .operation-toast {
+      position: fixed;
+      right: 18px;
+      bottom: 88px;
+      z-index: 30;
+      min-width: 220px;
+      max-width: min(320px, calc(100vw - 36px));
+      padding: 12px 14px;
+      border-radius: 18px;
+      border: 1px solid var(--line);
+      background: color-mix(in srgb, var(--bg-elev) 92%, #fff 8%);
+      box-shadow: 0 16px 38px rgba(0,0,0,0.14);
+      backdrop-filter: blur(18px);
+      color: var(--fg);
+      pointer-events: none;
+      opacity: 0;
+      transform: translateY(10px) scale(0.98);
+      transition: opacity 0.18s ease, transform 0.18s ease;
+    }
+
+    .operation-toast.visible {
+      opacity: 1;
+      transform: translateY(0) scale(1);
+    }
+
+    .operation-toast[data-tone="info"] {
+      border-color: color-mix(in srgb, var(--accent-2) 24%, var(--line));
+    }
+
+    .operation-toast[data-tone="success"] {
+      border-color: color-mix(in srgb, var(--success) 34%, var(--line));
+    }
+
+    .operation-toast[data-tone="warn"] {
+      border-color: color-mix(in srgb, var(--warn) 34%, var(--line));
+    }
+
+    .operation-toast__title {
+      font-size: 14px;
+      font-weight: 800;
+      letter-spacing: -0.01em;
+      line-height: 1.35;
+    }
+
+    .operation-toast__desc {
+      margin-top: 4px;
+      color: var(--muted);
+      font-size: 12px;
+      line-height: 1.45;
+    }
+
+    .operation-toast[data-tone="success"] .operation-toast__title {
+      color: var(--success);
+    }
+
+    .operation-toast[data-tone="warn"] .operation-toast__title {
+      color: var(--warn);
+    }
+
+    .operation-toast[data-tone="info"] .operation-toast__title {
+      color: var(--accent-2);
+    }
+
     .settings-overlay {
       position: fixed;
       inset: 0;
       z-index: 30;
-      display: none;
+      display: flex;
       align-items: center;
       justify-content: center;
       padding: 18px;
-      background: rgba(3, 8, 16, 0.5);
-      backdrop-filter: blur(8px);
+      background: rgba(3, 8, 16, 0);
+      backdrop-filter: blur(0px);
+      opacity: 0;
+      visibility: hidden;
+      pointer-events: none;
+      transform: scale(1.015);
+      transition:
+        opacity 220ms ease,
+        transform 220ms ease,
+        background-color 220ms ease,
+        backdrop-filter 220ms ease,
+        visibility 0s linear 220ms;
     }
 
     .settings-overlay.open {
-      display: flex;
+      background: rgba(3, 8, 16, 0.5);
+      backdrop-filter: blur(8px);
+      opacity: 1;
+      visibility: visible;
+      pointer-events: auto;
+      transform: scale(1);
+      transition:
+        opacity 220ms ease,
+        transform 220ms ease,
+        background-color 220ms ease,
+        backdrop-filter 220ms ease,
+        visibility 0s;
+    }
+
+    @media (prefers-color-scheme: light) {
+      /* Lighter overlay for settings in light mode to avoid darkening page visuals */
+      .settings-overlay.open {
+        background: rgba(255, 255, 255, 0.66);
+        backdrop-filter: blur(10px) saturate(120%);
+      }
+      .settings-overlay {
+        /* keep closed state neutral in light mode */
+        background: rgba(255,255,255,0);
+        backdrop-filter: blur(0px);
+      }
+    }
+
+    /* Improve contrast for adapter list and ip-block in light theme */
+    @media (prefers-color-scheme: light) {
+      .adapter-card {
+        background: linear-gradient(180deg, color-mix(in srgb, var(--bg-elev) 96%, #fff 4%), color-mix(in srgb, var(--bg-soft) 90%, var(--bg-elev)));
+        border-color: color-mix(in srgb, var(--accent) 6%, var(--line));
+        box-shadow: 0 12px 30px rgba(15,23,42,0.06);
+      }
+
+      .adapter-meta {
+        color: color-mix(in srgb, var(--fg) 78%, var(--muted));
+      }
+
+      .ip-block {
+        background: color-mix(in srgb, var(--bg-elev) 94%, #fff 6%);
+        border: 1px solid color-mix(in srgb, var(--line) 88%, rgba(0,0,0,0.06));
+        color: color-mix(in srgb, var(--fg) 84%, var(--muted));
+      }
     }
 
     .settings-panel {
@@ -919,6 +1074,50 @@
       min-height: 1.2em;
     }
 
+    .ipv6-check-badge {
+      margin-top: 14px;
+      width: fit-content;
+      gap: 8px;
+    }
+
+    .ipv6-check-text {
+      white-space: nowrap;
+    }
+
+    .ipv6-refresh {
+      width: 18px;
+      height: 18px;
+      border: 0;
+      padding: 0;
+      margin: 0;
+      background: transparent;
+      color: var(--muted);
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      cursor: pointer;
+      transition: color 0.18s ease, transform 0.18s ease;
+      flex: 0 0 auto;
+    }
+
+    .ipv6-refresh:hover {
+      color: var(--fg);
+      transform: rotate(22deg);
+    }
+
+    .ipv6-refresh:focus-visible {
+      outline: 2px solid color-mix(in srgb, var(--accent-2) 65%, white 35%);
+      outline-offset: 2px;
+      border-radius: 6px;
+    }
+
+    .ipv6-refresh svg {
+      width: 14px;
+      height: 14px;
+      fill: currentColor;
+      display: block;
+    }
+
     @media (max-width: 980px) {
       .hero, .grid, .control-grid { grid-template-columns: 1fr; }
       .log { height: auto; }
@@ -940,6 +1139,12 @@
         width: 48px;
         height: 48px;
         border-radius: 16px;
+      }
+      .operation-toast {
+        right: 12px;
+        bottom: 74px;
+        left: 12px;
+        max-width: none;
       }
       .github-fab img {
         width: 24px;
@@ -977,6 +1182,11 @@
       <path d="M19.14 12.94c.04-.31.06-.63.06-.94s-.02-.63-.06-.94l2.03-1.58a.5.5 0 0 0 .12-.64l-1.92-3.32a.5.5 0 0 0-.61-.22l-2.39.96a7.1 7.1 0 0 0-1.63-.94l-.36-2.54A.5.5 0 0 0 14.9 2h-3.82a.5.5 0 0 0-.49.42l-.36 2.54c-.58.22-1.12.52-1.63.94l-2.39-.96a.5.5 0 0 0-.61.22L3.68 8.46a.5.5 0 0 0 .12.64l2.03 1.58c-.04.31-.06.63-.06.94s.02.63.06.94l-2.03 1.58a.5.5 0 0 0-.12.64l1.92 3.32a.5.5 0 0 0 .61.22l2.39-.96c.5.42 1.05.76 1.63.94l.36 2.54a.5.5 0 0 0 .49.42h3.82a.5.5 0 0 0 .49-.42l.36-2.54c.58-.18 1.13-.52 1.63-.94l2.39.96a.5.5 0 0 0 .61-.22l1.92-3.32a.5.5 0 0 0-.12-.64l-2.03-1.58ZM12 15.5A3.5 3.5 0 1 1 12 8a3.5 3.5 0 0 1 0 7.5Z"/>
     </svg>
   </button>
+
+  <div class="operation-toast visible" id="operationToast" role="status" aria-live="polite" aria-atomic="true" data-tone="info">
+    <div class="operation-toast__title" id="operationToastTitle">正在初始化...</div>
+    <div class="operation-toast__desc" id="operationToastDesc">正在连接 WebSocket 并同步页面状态</div>
+  </div>
 
   <div class="settings-overlay" id="settingsOverlay" aria-hidden="true">
     <div class="settings-panel" role="dialog" aria-modal="true" aria-labelledby="settingsTitle">
@@ -1030,6 +1240,15 @@
           <div class="eyebrow">BKNetwork</div>
           <h1>北科校园网助手</h1>
           <p class="lead">通过浏览器管理网卡 IPv4 / IPv6 绑定和 Cloudflare WARP。页面会自动连接 WebSocket，实时显示后端事件与操作结果。</p>
+          <div class="badge ipv6-check-badge" id="ipv6CheckBadge">
+            <span id="ipv6CheckDot" class="dot warn"></span>
+            <span id="ipv6CheckText" class="ipv6-check-text">正在检测 IPv6 地址...</span>
+            <button id="ipv6RefreshBtn" class="ipv6-refresh" type="button" aria-label="刷新 IPv6 检测" title="刷新 IPv6 检测">
+              <svg viewBox="0 0 24 24" aria-hidden="true">
+                <path d="M17.65 6.35A7.95 7.95 0 0 0 12 4c-4.42 0-8 3.58-8 8s3.58 8 8 8c3.31 0 6.14-2.01 7.36-4.88a1 1 0 1 0-1.84-.8A6 6 0 1 1 12 6c1.38 0 2.63.47 3.63 1.24L14 9h6V3l-2.35 3.35Z"/>
+              </svg>
+            </button>
+          </div>
         </div>
         <div class="status-row">
           <div class="badge"><span id="backendDot" class="dot warn"></span><span id="backendBadge">后端状态</span></div>
@@ -1107,15 +1326,15 @@
             <div class="control-card">
               <div class="control-label">切换模式</div>
               <div class="mode-select" role="radiogroup" aria-label="网络模式选择">
-                <button id="btnIpv4" class="mode-option" type="button" onclick="switchStack('ipv4')" aria-pressed="false">
+                <button id="btnIpv4" class="mode-option" type="button" onclick="switchStack('ipv4').catch(() => {})" aria-pressed="false">
                   <span class="mode-dot" aria-hidden="true"></span>
                   <span>仅 v4</span>
                 </button>
-                <button id="btnIpv6" class="mode-option" type="button" onclick="switchStack('ipv6')" aria-pressed="false">
+                <button id="btnIpv6" class="mode-option" type="button" onclick="switchStack('ipv6').catch(() => {})" aria-pressed="false">
                   <span class="mode-dot" aria-hidden="true"></span>
                   <span>仅 v6</span>
                 </button>
-                <button id="btnBoth" class="mode-option" type="button" onclick="switchStack('both')" aria-pressed="false">
+                <button id="btnBoth" class="mode-option" type="button" onclick="switchStack('both').catch(() => {})" aria-pressed="false">
                   <span class="mode-dot" aria-hidden="true"></span>
                   <span>双栈</span>
                 </button>
@@ -1183,6 +1402,9 @@
     const networkBadgeDotEl = document.getElementById('networkDot');
     const freeBadgeEl = document.getElementById('freeBadge');
     const freeBadgeDotEl = document.getElementById('freeDot');
+    const ipv6CheckDotEl = document.getElementById('ipv6CheckDot');
+    const ipv6CheckTextEl = document.getElementById('ipv6CheckText');
+    const ipv6RefreshBtnEl = document.getElementById('ipv6RefreshBtn');
     const warpToggleEl = document.getElementById('warpToggle');
     const warpStateEl = document.getElementById('warpState');
     const easyModeToggleEl = document.getElementById('easyModeToggle');
@@ -1194,6 +1416,9 @@
     const settingSilentStartEl = document.getElementById('settingSilentStart');
     const settingWarpAutoStartEl = document.getElementById('settingWarpAutoStart');
     const settingWarpAppAutoStartEl = document.getElementById('settingWarpAppAutoStart');
+    const operationToastEl = document.getElementById('operationToast');
+    const operationToastTitleEl = document.getElementById('operationToastTitle');
+    const operationToastDescEl = document.getElementById('operationToastDesc');
     const settingsStatusEl = document.getElementById('settingsStatus');
     const stackModeStateEl = document.getElementById('stackModeState');
     const lastResultEl = document.getElementById('lastResult');
@@ -1219,6 +1444,19 @@
       warpAppAutoStart: false,
       saving: false,
     };
+    const operationToastState = {
+      hideTimer: null,
+      initializationDone: false,
+    };
+    const fastStatusRefreshState = {
+      intervalId: null,
+      stopTimerId: null,
+      activeUntil: 0,
+    };
+    const pendingToggleState = {
+      warp: null,
+      easyMode: null,
+    };
 
     function setTargetAdapter(value) {
       const next = typeof value === 'string' && value.trim() !== '' ? value.trim() : 'WiFi';
@@ -1237,6 +1475,71 @@
 
     function setBusy(busy) {
       buttons.forEach(btn => btn.disabled = busy);
+    }
+
+    function stopFastStatusRefresh() {
+      if (fastStatusRefreshState.intervalId !== null) {
+        window.clearInterval(fastStatusRefreshState.intervalId);
+        fastStatusRefreshState.intervalId = null;
+      }
+      if (fastStatusRefreshState.stopTimerId !== null) {
+        window.clearTimeout(fastStatusRefreshState.stopTimerId);
+        fastStatusRefreshState.stopTimerId = null;
+      }
+      fastStatusRefreshState.activeUntil = 0;
+    }
+
+    function startFastStatusRefresh(durationMs = 15000, intervalMs = 2000) {
+      const now = Date.now();
+      fastStatusRefreshState.activeUntil = Math.max(fastStatusRefreshState.activeUntil, now + durationMs);
+
+      if (fastStatusRefreshState.intervalId === null) {
+        fastStatusRefreshState.intervalId = window.setInterval(() => {
+          if (Date.now() >= fastStatusRefreshState.activeUntil) {
+            stopFastStatusRefresh();
+            return;
+          }
+          refreshStatus().catch(() => {});
+        }, intervalMs);
+      }
+
+      if (fastStatusRefreshState.stopTimerId !== null) {
+        window.clearTimeout(fastStatusRefreshState.stopTimerId);
+      }
+      fastStatusRefreshState.stopTimerId = window.setTimeout(() => {
+        if (Date.now() >= fastStatusRefreshState.activeUntil) {
+          stopFastStatusRefresh();
+        }
+      }, durationMs);
+
+      refreshStatus().catch(() => {});
+    }
+
+    function getStableWarpValue() {
+      if (badgeState.warp.stable !== null) {
+        return badgeState.warp.stable;
+      }
+      return !!latestNetwork?.warp?.connected;
+    }
+
+    function getStableEasyModeValue() {
+      const ifName = currentIfName();
+      const adapter = Array.isArray(latestNetwork?.adapters)
+        ? latestNetwork.adapters.find(item => item && item.name === ifName)
+        : null;
+      return !!latestNetwork?.warp?.connected && !!adapter?.freeFlow;
+    }
+
+    function clearPendingToggle(kind) {
+      pendingToggleState[kind] = null;
+      if (!pendingToggleState.warp && !pendingToggleState.easyMode) {
+        stopFastStatusRefresh();
+      }
+    }
+
+    function markPendingToggle(kind, enabled, finishOnEvent) {
+      pendingToggleState[kind] = { enabled, finishOnEvent };
+      startFastStatusRefresh();
     }
 
     function settleBoolState(state, next, force = false) {
@@ -1341,6 +1644,72 @@
       setText(settingsStatusEl, value);
     }
 
+    function clearOperationToastTimer() {
+      if (operationToastState.hideTimer !== null) {
+        clearTimeout(operationToastState.hideTimer);
+        operationToastState.hideTimer = null;
+      }
+    }
+
+    function showOperationToast(title, desc = '', tone = 'info', autoHideMs = 0) {
+      if (!operationToastEl) {
+        return;
+      }
+      clearOperationToastTimer();
+      setText(operationToastTitleEl, title);
+      setText(operationToastDescEl, desc);
+      operationToastEl.dataset.tone = tone;
+      operationToastEl.classList.add('visible');
+      if (autoHideMs > 0) {
+        operationToastState.hideTimer = window.setTimeout(() => {
+          operationToastEl.classList.remove('visible');
+          operationToastState.hideTimer = null;
+        }, autoHideMs);
+      }
+    }
+
+    function showInitializationToast() {
+      if (operationToastState.initializationDone) {
+        return;
+      }
+      showOperationToast('正在初始化...', '正在连接 WebSocket 并同步页面状态', 'info');
+    }
+
+    function markInitializationComplete() {
+      if (operationToastState.initializationDone) {
+        return;
+      }
+      operationToastState.initializationDone = true;
+      showOperationToast('初始化成功！', '页面状态已同步完成', 'success', 1800);
+    }
+
+    function showConfigurationToast(label, detail) {
+      showOperationToast(`正在配置${label}...`, detail || '', 'info');
+    }
+
+    function showConfigurationSuccess() {
+      showOperationToast('配置成功！', '页面状态即将同步更新', 'success', 1600);
+    }
+
+    function showConfigurationFailure(message) {
+      showOperationToast('配置失败', message || '请稍后重试', 'warn', 2400);
+    }
+
+    function scheduleDeferredStartupTasks() {
+      const runDeferred = () => {
+        checkIpv6Address().catch(() => {});
+        loadSettings().catch(() => {});
+        refreshTrafficUsage().catch(() => {});
+      };
+
+      if ('requestIdleCallback' in window) {
+        window.requestIdleCallback(runDeferred, { timeout: 2500 });
+        return;
+      }
+
+      window.setTimeout(runDeferred, 0);
+    }
+
     function syncSettingsControls() {
       if (settingAutoStartEl) settingAutoStartEl.checked = !!settingsState.autoStart;
       if (settingSilentStartEl) settingSilentStartEl.checked = !!settingsState.silentStart;
@@ -1428,6 +1797,57 @@
       setDot(freeBadgeDotEl, tone);
     }
 
+    function setIpv6CheckStatus(tone, text) {
+      setDot(ipv6CheckDotEl, tone);
+      setText(ipv6CheckTextEl, text);
+    }
+
+    function delay(ms) {
+      return new Promise(resolve => setTimeout(resolve, ms));
+    }
+
+    async function fetchIpv6AddressOnce() {
+      const controller = new AbortController();
+      const timeoutId = window.setTimeout(() => controller.abort(), 5000);
+      try {
+        const res = await fetch('https://api-ipv6.ip.sb/ip', {
+          method: 'GET',
+          cache: 'no-store',
+          signal: controller.signal,
+        });
+        if (!res.ok) {
+          throw new Error(`HTTP ${res.status}`);
+        }
+        const text = (await res.text()).trim();
+        if (!text) {
+          throw new Error('empty response');
+        }
+        return text;
+      } finally {
+        clearTimeout(timeoutId);
+      }
+    }
+
+    async function checkIpv6Address() {
+      setIpv6CheckStatus('warn', '正在检测 IPv6 地址...');
+      let lastError = null;
+      for (let attempt = 1; attempt <= 3; attempt += 1) {
+        try {
+          const ipv6 = await fetchIpv6AddressOnce();
+          setIpv6CheckStatus('ok', ipv6);
+          return ipv6;
+        } catch (err) {
+          lastError = err;
+          if (attempt < 3) {
+            await delay(800);
+          }
+        }
+      }
+      setIpv6CheckStatus('err', '未检测到ipv6地址，不支持免流功能');
+      appendLog(`IPv6 检测失败：${lastError?.message || 'unknown error'}`);
+      return null;
+    }
+
     function syncStackModeState(network) {
       const ifName = currentIfName();
       const adapter = Array.isArray(network?.adapters)
@@ -1455,6 +1875,10 @@
       if (!warpToggleEl || !warpStateEl) {
         return;
       }
+      if (pendingToggleState.warp && !force) {
+        setText(warpStateEl, pendingToggleState.warp.enabled ? '正在开启...' : '正在关闭...');
+        return;
+      }
       const enabled = settleBoolState(badgeState.warp, !!network?.warp?.connected, force);
       warpToggleEl.checked = enabled;
       setText(warpStateEl, enabled ? '当前：已开启' : '当前：已关闭');
@@ -1467,6 +1891,10 @@
 
     function syncEasyModeState(network) {
       if (!easyModeToggleEl || !easyModeStateEl) {
+        return;
+      }
+      if (pendingToggleState.easyMode) {
+        setText(easyModeStateEl, pendingToggleState.easyMode.enabled ? '正在开启...' : '正在关闭...');
         return;
       }
       const ifName = currentIfName();
@@ -1722,25 +2150,42 @@
 
     async function switchStack(mode) {
       const ifName = currentIfName();
-      await postAction('/api/v1/switch', { ifName, mode });
+      const stackLabel = {
+        ipv4: 'IP 栈协议（仅 v4）',
+        ipv6: 'IP 栈协议（仅 v6）',
+        both: 'IP 栈协议（双栈）',
+      }[mode] || 'IP 栈协议';
+      showConfigurationToast(stackLabel);
+      try {
+        await postAction('/api/v1/switch', { ifName, mode });
+        showConfigurationSuccess();
+      } catch (err) {
+        showConfigurationFailure(err.message);
+        throw err;
+      }
     }
 
     async function applyWarpToggle(enabled) {
       if (!warpToggleEl || !warpStateEl) {
         return;
       }
-      setBusy(true);
-      warpToggleEl.checked = !!enabled;
+      if (pendingToggleState.warp) {
+        warpToggleEl.checked = getStableWarpValue();
+        return;
+      }
+      showConfigurationToast('WARP', enabled ? '正在开启 WARP 连接' : '正在关闭 WARP 连接');
+      markPendingToggle('warp', enabled, 'warp.ok');
+      warpToggleEl.checked = getStableWarpValue();
       setText(warpStateEl, enabled ? '正在开启...' : '正在关闭...');
+      setBusy(true);
       try {
         await postActionSilently('/api/v1/warp', { action: enabled ? 'start' : 'stop' });
-        setText(warpStateEl, enabled ? '当前：已开启' : '当前：已关闭');
-        applyOptimisticNetworkState({ warpConnected: enabled });
-        setTimeout(() => refreshStatus().catch(() => {}), 1200);
       } catch (err) {
-        warpToggleEl.checked = !enabled;
+        clearPendingToggle('warp');
+        warpToggleEl.checked = getStableWarpValue();
         setText(warpStateEl, '切换失败');
         appendLog(`WARP 切换失败：${err.message}`);
+        showConfigurationFailure(err.message);
         throw err;
       } finally {
         setBusy(false);
@@ -1751,27 +2196,29 @@
       if (!easyModeToggleEl || !easyModeStateEl) {
         return;
       }
-      setBusy(true);
-      easyModeToggleEl.checked = !!enabled;
+      if (pendingToggleState.easyMode) {
+        easyModeToggleEl.checked = getStableEasyModeValue();
+        return;
+      }
+      showConfigurationToast('免流模式', enabled ? '正在开启免流模式' : '正在关闭免流模式');
+      markPendingToggle('easyMode', enabled, enabled ? 'warp.ok' : 'switch.ok');
+      easyModeToggleEl.checked = getStableEasyModeValue();
       setText(easyModeStateEl, enabled ? '正在开启...' : '正在关闭...');
+      setBusy(true);
       try {
         if (enabled) {
           await postActionSilently('/api/v1/switch', { ifName: currentIfName(), mode: 'ipv6' });
           await postActionSilently('/api/v1/warp', { action: 'start' });
-          setText(easyModeStateEl, '当前已开启');
-          applyOptimisticNetworkState({ warpConnected: true, adapterMode: 'ipv6' });
-          setTimeout(() => refreshStatus().catch(() => {}), 1200);
         } else {
           await postActionSilently('/api/v1/warp', { action: 'stop' });
           await postActionSilently('/api/v1/switch', { ifName: currentIfName(), mode: 'both' });
-          setText(easyModeStateEl, '当前关闭');
-          applyOptimisticNetworkState({ warpConnected: false, adapterMode: 'both' });
-          setTimeout(() => refreshStatus().catch(() => {}), 1200);
         }
       } catch (err) {
-        easyModeToggleEl.checked = !enabled;
+        clearPendingToggle('easyMode');
+        easyModeToggleEl.checked = getStableEasyModeValue();
         setText(easyModeStateEl, '切换失败');
         appendLog(`免流模式切换失败：${err.message}`);
+        showConfigurationFailure(err.message);
         throw err;
       } finally {
         setBusy(false);
@@ -1797,7 +2244,37 @@
               lastEvent: { type: data.type, message: data.message },
               network: data.data,
             });
-            setText(lastUpdatedEl, `Network ${new Date().toLocaleTimeString()}`);
+            setText(lastUpdatedEl, `${new Date().toLocaleTimeString()}`);
+            markInitializationComplete();
+            return;
+          }
+          if (data.type === 'warp.ok') {
+            if (pendingToggleState.warp && pendingToggleState.warp.finishOnEvent === 'warp.ok') {
+              applyOptimisticNetworkState({ warpConnected: true });
+              clearPendingToggle('warp');
+              warpToggleEl.checked = true;
+              setText(warpStateEl, '当前：已开启');
+              showConfigurationSuccess();
+            }
+            if (pendingToggleState.easyMode && pendingToggleState.easyMode.finishOnEvent === 'warp.ok') {
+              applyOptimisticNetworkState({ warpConnected: true, adapterMode: 'ipv6' });
+              clearPendingToggle('easyMode');
+              easyModeToggleEl.checked = true;
+              setText(easyModeStateEl, '当前已开启');
+              showConfigurationSuccess();
+            }
+            refreshStatus(true).catch(() => {});
+            return;
+          }
+          if (data.type === 'switch.ok') {
+            if (pendingToggleState.easyMode && pendingToggleState.easyMode.finishOnEvent === 'switch.ok') {
+              applyOptimisticNetworkState({ warpConnected: false, adapterMode: 'both' });
+              clearPendingToggle('easyMode');
+              easyModeToggleEl.checked = false;
+              setText(easyModeStateEl, '当前关闭');
+              showConfigurationSuccess();
+            }
+            refreshStatus(true).catch(() => {});
             return;
           }
           if (data.type === 'heartbeat') {
@@ -1843,6 +2320,12 @@
     if (settingsOpenBtn) {
       settingsOpenBtn.addEventListener('click', () => {
         openSettingsPanel().catch(() => {});
+      });
+    }
+
+    if (ipv6RefreshBtnEl) {
+      ipv6RefreshBtnEl.addEventListener('click', () => {
+        checkIpv6Address().catch(() => {});
       });
     }
 
@@ -1893,10 +2376,10 @@
     });
 
     setAdvancedMode(false);
+    showInitializationToast();
 
-    loadSettings();
     refreshStatus(true);
-    refreshTrafficUsage();
+    window.addEventListener('load', scheduleDeferredStartupTasks, { once: true });
     setInterval(refreshTrafficUsage, 60000);
     connectWS();
   </script>
