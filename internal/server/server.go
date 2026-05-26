@@ -26,6 +26,7 @@ func NewServer(addr string) *Server {
 	mux := http.NewServeMux()
 	hub := events.NewHub()
 	mux.HandleFunc("/api/v1/switch", handlers.SwitchStackHandler(hub))
+	mux.HandleFunc("/api/v1/dns", handlers.DnsHandler(hub))
 	mux.HandleFunc("/api/v1/warp", handlers.WarpHandler(hub))
 	mux.HandleFunc("/api/v1/settings", handlers.SettingsHandler(hub))
 	mux.HandleFunc("/api/v1/status", handlers.StatusHandler(hub))

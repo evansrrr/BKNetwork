@@ -294,6 +294,19 @@
       box-shadow: 0 12px 32px rgba(0,0,0,0.05);
     }
 
+    .easy-mode-dns64-card {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 16px;
+      margin-top: 12px;
+      padding: 16px 18px;
+      border-radius: 18px;
+      border: 1px solid var(--line);
+      background: linear-gradient(180deg, color-mix(in srgb, var(--bg-elev) 86%, #fff 14%), var(--bg-soft));
+      box-shadow: 0 12px 32px rgba(0,0,0,0.05);
+    }
+
     .easy-mode-title {
       font-size: 16px;
       font-weight: 800;
@@ -802,6 +815,12 @@
       gap: 16px;
     }
 
+    .control-card.dns-card {
+      grid-column: 1 / -1;
+      display: grid;
+      gap: 14px;
+    }
+
     .control-card {
       padding: 16px;
       border-radius: 18px;
@@ -830,6 +849,63 @@
       font-size: 12px;
       font-weight: 500;
       color: var(--muted);
+    }
+
+    .dns-grid {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 12px;
+    }
+
+    .dns-field {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      min-width: 0;
+    }
+
+    .dns-field span {
+      color: var(--fg);
+      font-size: 13px;
+      font-weight: 700;
+      letter-spacing: 0.02em;
+    }
+
+    .dns-field small {
+      color: var(--muted);
+      font-size: 12px;
+      line-height: 1.4;
+    }
+
+    .dns-input {
+      width: 100%;
+      min-height: 46px;
+      padding: 12px 14px;
+      border-radius: 14px;
+      border: 1px solid var(--line-strong);
+      background: color-mix(in srgb, var(--bg-elev) 92%, #fff 8%);
+      color: var(--fg);
+      font: inherit;
+      font-size: 14px;
+      outline: none;
+      transition: border-color 0.2s ease, box-shadow 0.2s ease, background 0.2s ease;
+    }
+
+    .dns-input:focus {
+      border-color: color-mix(in srgb, var(--accent-2) 40%, var(--line-strong));
+      box-shadow: 0 0 0 4px color-mix(in srgb, var(--accent-2) 14%, transparent);
+    }
+
+    .dns-input:disabled {
+      cursor: not-allowed;
+      opacity: 0.62;
+      background: color-mix(in srgb, var(--bg-soft) 82%, var(--bg-elev));
+    }
+
+    .dns-status {
+      color: var(--muted);
+      font-size: 12px;
+      line-height: 1.6;
     }
 
     .footer-note {
@@ -1158,6 +1234,13 @@
         flex-direction: column;
         align-items: flex-start;
       }
+      .easy-mode-dns64-card {
+        flex-direction: column;
+        align-items: flex-start;
+      }
+      .dns-grid {
+        grid-template-columns: 1fr;
+      }
     }
   </style>
 </head>
@@ -1193,7 +1276,7 @@
       <header>
         <div>
           <h3 id="settingsTitle">设置</h3>
-          <div class="settings-desc">同一页面内配置 BKNetwork 的开机行为与 WARP 启动偏好。</div>
+          <div class="settings-desc"><!-- 描述 --></div>
         </div>
         <button class="close-btn" id="settingsCloseBtn" type="button" aria-label="关闭设置">×</button>
       </header>
@@ -1201,7 +1284,7 @@
         <div class="setting-row">
           <div class="setting-copy">
             <div class="setting-title">BKNetwork 开机自启</div>
-            <div class="setting-note">登录 Windows 后自动启动 BKNetwork，并保留托盘图标。</div>
+            <div class="setting-note">登录 Windows 后自动启动 BKNetwork</div>
           </div>
           <span class="toggle">
             <input id="settingAutoStart" type="checkbox" />
@@ -1211,7 +1294,7 @@
         <div class="setting-row">
           <div class="setting-copy">
             <div class="setting-title">静默启动</div>
-            <div class="setting-note">启动时不自动弹出网页，只保留后台和托盘。</div>
+            <div class="setting-note">启动时不弹出网页，只保留托盘</div>
           </div>
           <span class="toggle">
             <input id="settingSilentStart" type="checkbox" />
@@ -1220,8 +1303,8 @@
         </div>
         <div class="setting-row">
           <div class="setting-copy">
-            <div class="setting-title">Cloudflare WARP 程序开机自启</div>
-            <div class="setting-note">登录 Windows 后自动启动 Cloudflare WARP 客户端本体，不会自动连接。</div>
+            <div class="setting-title">WARP 客户端开机自启</div>
+            <div class="setting-note">登录 Windows 后自动启动 WARP 客户端，不自动连接</div>
           </div>
           <span class="toggle">
             <input id="settingWarpAppAutoStart" type="checkbox" />
@@ -1239,7 +1322,7 @@
         <div>
           <div class="eyebrow">BKNetwork</div>
           <h1>北科校园网助手</h1>
-          <p class="lead">通过浏览器管理网卡 IPv4 / IPv6 绑定和 Cloudflare WARP。页面会自动连接 WebSocket，实时显示后端事件与操作结果。</p>
+          <p class="lead">v0.9.3-beta</p>
           <div class="badge ipv6-check-badge" id="ipv6CheckBadge">
             <span id="ipv6CheckDot" class="dot warn"></span>
             <span id="ipv6CheckText" class="ipv6-check-text">正在检测 IPv6 地址...</span>
@@ -1252,6 +1335,7 @@
         </div>
         <div class="status-row">
           <div class="badge"><span id="backendDot" class="dot warn"></span><span id="backendBadge">后端状态</span></div>
+          <div class="badge"><span id="adminDot" class="dot warn"></span><span id="adminBadge">管理员权限检查中</span></div>
           <div class="badge"><span id="networkDot" class="dot"></span><span id="networkBadge">网络状态</span></div>
           <div class="badge"><span id="freeDot" class="dot"></span><span id="freeBadge">免流状态</span></div>
         </div>
@@ -1286,8 +1370,8 @@
       </div>
       <label class="easy-mode-card" for="easyModeToggle">
         <div>
-          <div class="easy-mode-title">免流模式</div>
-          <div class="easy-mode-desc">开启后自动切换为仅 v6，并启用 WARP；关闭后恢复双栈并关闭 WARP</div>
+          <div class="easy-mode-title">Warp 免流模式</div>
+          <div class="easy-mode-desc">开启后切换为仅 v6，并启用 Warp；关闭则恢复双栈并关闭 Warp</div>
           <div class="easy-mode-state" id="easyModeState">当前关闭</div>
         </div>
         <span class="toggle">
@@ -1295,11 +1379,22 @@
           <span class="toggle-track" aria-hidden="true"></span>
         </span>
       </label>
+      <div class="easy-mode-dns64-card">
+        <div>
+          <div class="easy-mode-title">DNS64 免流模式</div>
+          <div class="easy-mode-desc">开启后自动切换为仅 v6，并把当前网卡的 IPv6 DNS 设为 2a01:4f8:c2c:123f::1；关闭后恢复双栈。</div>
+          <div class="easy-mode-state" id="dns64ModeState">当前关闭</div>
+        </div>
+        <label class="toggle" for="dns64ModeToggle">
+          <input id="dns64ModeToggle" type="checkbox" />
+          <span class="toggle-track" aria-hidden="true"></span>
+        </label>
+      </div>
       <br/><br/>
       <div class="section-head">
         <div>
-          <h2>免流模式需安装 Warp</h2>
-          <div class="section-kicker"><a href="https://downloads.cloudflareclient.com/v1/download/windows/ga" target="_blank">在此下载 Warp</a>，是否开机自启动不影响</div>
+          <h2>Warp 免流模式需安装 Warp</h2>
+          <div class="section-kicker"><a href="https://downloads.cloudflareclient.com/v1/download/windows/ga" target="_blank">在此下载 Warp</a>，可在设置页面关闭Warp的开机自启，不影响功能</div>
         </div>
       </div>
     </section>
@@ -1310,7 +1405,7 @@
           <div class="section-head">
             <div>
               <h2>网络控制</h2>
-              <div class="section-kicker">选择目标网卡后，切换只会影响该接口的 IPv4 / IPv6 绑定。</div>
+              <div class="section-kicker"><!-- 描述 --></div>
             </div>
           </div>
           <div class="control-grid">
@@ -1320,11 +1415,10 @@
                 <select id="ifName2">
                   <option value="WiFi">WiFi</option>
                 </select>
-                <small>下拉选择需要切换的接口</small>
               </div>
             </div>
             <div class="control-card">
-              <div class="control-label">切换模式</div>
+              <div class="control-label">切换 ip 栈协议</div>
               <div class="mode-select" role="radiogroup" aria-label="网络模式选择">
                 <button id="btnIpv4" class="mode-option" type="button" onclick="switchStack('ipv4').catch(() => {})" aria-pressed="false">
                   <span class="mode-dot" aria-hidden="true"></span>
@@ -1341,21 +1435,33 @@
               </div>
               <div class="mode-state" id="stackModeState">当前：未加载</div>
             </div>
+            <div class="control-card dns-card" id="dnsCard">
+              <div class="control-label">更改 DNS</div>
+              <div class="dns-grid">
+                <label class="dns-field" for="dnsIpv4Input">
+                  <span>IPv4 DNS</span>
+                  <input id="dnsIpv4Input" class="dns-input" type="text" autocomplete="off" spellcheck="false" placeholder="例如 1.1.1.1" />
+                </label>
+                <label class="dns-field" for="dnsIpv6Input">
+                  <span>IPv6 DNS</span>
+                  <input id="dnsIpv6Input" class="dns-input" type="text" autocomplete="off" spellcheck="false" placeholder="例如 2400:3200::1" />
+                </label>
+              </div>
+            </div>
           </div>
-          <div class="footer-note">说明：仅 v4 会启用 IPv4 并禁用 IPv6；仅 v6 会禁用 IPv4 并启用 IPv6；双栈会同时启用 IPv4 与 IPv6。实际执行需要管理员权限，页面会从后端事件中接收成功/失败消息。</div>
         </div>
 
         <div class="panel section">
           <div class="section-head">
             <div>
               <h2>Cloudflare WARP</h2>
-              <div class="section-kicker">通过本机 warp-cli 切换隧道连接状态，状态由 WS 快照同步。</div>
+              <div class="section-kicker"><!-- 描述 --></div>
             </div>
           </div>
           <label class="warp-toggle-card" for="warpToggle">
             <div class="warp-copy">
               <div class="warp-title">WARP 开关</div>
-              <div class="warp-desc">打开即启动 WARP，关闭即停止 WARP。当前状态来自 WebSocket 返回内容。</div>
+              <div class="warp-desc">状态更新可能有延迟</div>
               <div class="warp-state" id="warpState">当前：未加载</div>
             </div>
             <span class="toggle">
@@ -1363,7 +1469,7 @@
               <span class="toggle-track" aria-hidden="true"></span>
             </span>
           </label>
-          <div class="footer-note">后端会调用 <code>warp-cli</code>，若客户端不可用会直接返回错误信息。</div>
+          
         </div>
       </section>
 
@@ -1371,7 +1477,7 @@
         <div class="section-head">
           <div>
             <h2>网卡</h2>
-            <div class="section-kicker">中间显示受监控的网卡列表与状态。</div>
+            <div class="section-kicker"><!-- 描述 --></div>
           </div>
         </div>
         <div class="adapter-list" id="adapterList"></div>
@@ -1381,7 +1487,7 @@
         <div class="section-head">
           <div>
             <h2>日志</h2>
-            <div class="section-kicker">实时日志流，按时间倒序显示最新事件。</div>
+            <div class="section-kicker"><!-- 描述 --></div>
           </div>
         </div>
         <div class="log-box" id="log"></div>
@@ -1398,6 +1504,8 @@
     const advancedModeToggleEl = document.getElementById('advancedModeToggle');
     const backendBadgeEl = document.getElementById('backendBadge');
     const backendBadgeDotEl = document.getElementById('backendDot');
+    const adminBadgeEl = document.getElementById('adminBadge');
+    const adminBadgeDotEl = document.getElementById('adminDot');
     const networkBadgeEl = document.getElementById('networkBadge');
     const networkBadgeDotEl = document.getElementById('networkDot');
     const freeBadgeEl = document.getElementById('freeBadge');
@@ -1409,6 +1517,8 @@
     const warpStateEl = document.getElementById('warpState');
     const easyModeToggleEl = document.getElementById('easyModeToggle');
     const easyModeStateEl = document.getElementById('easyModeState');
+    const dns64ModeToggleEl = document.getElementById('dns64ModeToggle');
+    const dns64ModeStateEl = document.getElementById('dns64ModeState');
     const settingsOpenBtn = document.getElementById('settingsOpenBtn');
     const settingsOverlayEl = document.getElementById('settingsOverlay');
     const settingsCloseBtn = document.getElementById('settingsCloseBtn');
@@ -1421,6 +1531,10 @@
     const operationToastDescEl = document.getElementById('operationToastDesc');
     const settingsStatusEl = document.getElementById('settingsStatus');
     const stackModeStateEl = document.getElementById('stackModeState');
+    const dnsCardEl = document.getElementById('dnsCard');
+    const dnsIpv4InputEl = document.getElementById('dnsIpv4Input');
+    const dnsIpv6InputEl = document.getElementById('dnsIpv6Input');
+    const dnsStatusEl = document.getElementById('dnsStatus');
     const lastResultEl = document.getElementById('lastResult');
     const lastUpdatedEl = document.getElementById('lastUpdated');
     const trafficUsageEl = document.getElementById('trafficUsage');
@@ -1431,7 +1545,7 @@
       ipv6: document.getElementById('btnIpv6'),
       both: document.getElementById('btnBoth'),
     };
-    const buttons = [stackModeButtons.ipv4, stackModeButtons.ipv6, stackModeButtons.both, warpToggleEl, easyModeToggleEl].filter(Boolean);
+    const buttons = [stackModeButtons.ipv4, stackModeButtons.ipv6, stackModeButtons.both, warpToggleEl, easyModeToggleEl, dns64ModeToggleEl].filter(Boolean);
     let latestNetwork = null;
     const badgeState = {
       network: { stable: null, pending: null },
@@ -1457,6 +1571,22 @@
       warp: null,
       easyMode: null,
     };
+    const dns64ModeState = {
+      pending: null,
+      backupIpv6Servers: [],
+    };
+    const dnsEditorState = {
+      adapterName: '',
+      committed: {
+        ipv4: '',
+        ipv6: '',
+      },
+      dirty: {
+        ipv4: false,
+        ipv6: false,
+      },
+      saving: false,
+    };
 
     function setTargetAdapter(value) {
       const next = typeof value === 'string' && value.trim() !== '' ? value.trim() : 'WiFi';
@@ -1466,6 +1596,8 @@
         }
       }
       syncEasyModeState(latestNetwork);
+      syncDnsEditor(latestNetwork);
+      syncDns64ModeState(latestNetwork);
     }
 
     for (const select of targetAdapterSelects) {
@@ -1644,6 +1776,14 @@
       setText(settingsStatusEl, value);
     }
 
+    function setDnsStatus(value) {
+      setText(dnsStatusEl, value);
+    }
+
+    function setDns64ModeStatus(value) {
+      setText(dns64ModeStateEl, value);
+    }
+
     function clearOperationToastTimer() {
       if (operationToastState.hideTimer !== null) {
         clearTimeout(operationToastState.hideTimer);
@@ -1789,12 +1929,314 @@
       setDot(backendBadgeDotEl, tone);
     }
 
+    function setAdminBadge(tone, text) {
+      setDot(adminBadgeDotEl, tone);
+      setText(adminBadgeEl, text);
+    }
+
     function setNetworkBadge(tone) {
       setDot(networkBadgeDotEl, tone);
     }
 
     function setFreeBadge(tone) {
       setDot(freeBadgeDotEl, tone);
+    }
+
+    function formatDnsServers(values) {
+      return Array.isArray(values) && values.length > 0 ? values.join(', ') : '';
+    }
+
+    function parseDnsServers(value) {
+      return String(value || '')
+        .split(/[\s,;]+/)
+        .map(item => item.trim())
+        .filter(Boolean);
+    }
+
+    function splitDnsServers(values) {
+      const ipv4 = [];
+      const ipv6 = [];
+      for (const value of Array.isArray(values) ? values : []) {
+        const text = typeof value === 'string' ? value.trim() : '';
+        if (!text) {
+          continue;
+        }
+        if (text.includes(':')) {
+          ipv6.push(text);
+        } else {
+          ipv4.push(text);
+        }
+      }
+      return { ipv4, ipv6 };
+    }
+
+    const DNS64_IPV6_RESOLVER = '2a01:4f8:c2c:123f::1';
+
+    function isDns64ModeActive(adapter) {
+      if (!adapter || !adapter.ipv6Enabled || adapter.ipv4Enabled) {
+        return false;
+      }
+      const { ipv6 } = splitDnsServers(adapter.dns);
+      return ipv6.length === 1 && ipv6[0] === DNS64_IPV6_RESOLVER;
+    }
+
+    function getDns64Backup(adapter) {
+      const { ipv6 } = splitDnsServers(adapter?.dns);
+      return ipv6;
+    }
+
+    async function postActionWithRollback(path, body) {
+      return postActionSilently(path, body);
+    }
+
+    function getSelectedAdapter(network) {
+      const ifName = currentIfName();
+      return Array.isArray(network?.adapters)
+        ? network.adapters.find(item => item && item.name === ifName)
+        : null;
+    }
+
+    function syncDnsEditor(network, force = false) {
+      if (!dnsIpv4InputEl || !dnsIpv6InputEl) {
+        return;
+      }
+
+      const adapter = getSelectedAdapter(network);
+      if (!adapter) {
+        dnsEditorState.adapterName = '';
+        dnsEditorState.committed.ipv4 = '';
+        dnsEditorState.committed.ipv6 = '';
+        dnsEditorState.dirty.ipv4 = false;
+        dnsEditorState.dirty.ipv6 = false;
+        dnsIpv4InputEl.value = '';
+        dnsIpv6InputEl.value = '';
+        dnsIpv4InputEl.disabled = true;
+        dnsIpv6InputEl.disabled = true;
+        setDnsStatus('请先选择目标网卡');
+        return;
+      }
+
+      const adapterChanged = dnsEditorState.adapterName !== adapter.name;
+      if (adapterChanged) {
+        dnsEditorState.adapterName = adapter.name;
+        dnsEditorState.dirty.ipv4 = false;
+        dnsEditorState.dirty.ipv6 = false;
+      }
+
+      const { ipv4, ipv6 } = splitDnsServers(adapter.dns);
+      const ipv4Value = formatDnsServers(ipv4);
+      const ipv6Value = formatDnsServers(ipv6);
+      const ipv4Focused = document.activeElement === dnsIpv4InputEl;
+      const ipv6Focused = document.activeElement === dnsIpv6InputEl;
+
+      if (force || adapterChanged || (!ipv4Focused && !dnsEditorState.dirty.ipv4)) {
+        dnsIpv4InputEl.value = ipv4Value;
+        dnsEditorState.committed.ipv4 = ipv4Value;
+        dnsEditorState.dirty.ipv4 = false;
+      }
+
+      if (force || adapterChanged || (!ipv6Focused && !dnsEditorState.dirty.ipv6)) {
+        dnsIpv6InputEl.value = ipv6Value;
+        dnsEditorState.committed.ipv6 = ipv6Value;
+        dnsEditorState.dirty.ipv6 = false;
+      }
+
+      dnsIpv4InputEl.disabled = dnsEditorState.saving || !adapter.ipv4Enabled;
+      dnsIpv6InputEl.disabled = dnsEditorState.saving || !adapter.ipv6Enabled;
+      dnsIpv4InputEl.placeholder = adapter.ipv4Enabled ? '例如 114.114.114.114, 8.8.8.8' : '当前网卡未启用 IPv4';
+      dnsIpv6InputEl.placeholder = adapter.ipv6Enabled ? '例如 2400:3200::1, 2001:4860:4860::8888' : '当前网卡未启用 IPv6';
+
+      if (dnsEditorState.saving) {
+        setDnsStatus('正在保存 DNS...');
+        return;
+      }
+      if (!adapter.ipv4Enabled && !adapter.ipv6Enabled) {
+        setDnsStatus('当前网卡未启用 IPv4/IPv6，DNS 仅可查看');
+        return;
+      }
+      if (dnsEditorState.dirty.ipv4 || dnsEditorState.dirty.ipv6) {
+        setDnsStatus('DNS 有未保存的修改');
+        return;
+      }
+      setDnsStatus('回车或点击文本框外保存');
+    }
+
+    function syncDns64ModeState(network, force = false) {
+      if (!dns64ModeToggleEl || !dns64ModeStateEl) {
+        return;
+      }
+
+      const adapter = getSelectedAdapter(network);
+      if (!adapter) {
+        dns64ModeState.pending = null;
+        dns64ModeToggleEl.checked = false;
+        dns64ModeToggleEl.disabled = true;
+        setDns64ModeStatus('请先选择目标网卡');
+        return;
+      }
+
+      if (dns64ModeState.pending) {
+        dns64ModeToggleEl.checked = dns64ModeState.pending.enabled;
+        dns64ModeToggleEl.disabled = true;
+        setDns64ModeStatus(dns64ModeState.pending.enabled ? '正在开启 DNS64...' : '正在关闭 DNS64...');
+        return;
+      }
+
+      const active = isDns64ModeActive(adapter);
+      dns64ModeToggleEl.checked = active;
+      dns64ModeToggleEl.disabled = false;
+
+      if (!adapter.ipv4Enabled && !adapter.ipv6Enabled) {
+        setDns64ModeStatus('当前网卡未启用 IPv4/IPv6，DNS64 不可用');
+        return;
+      }
+      if (active) {
+        setDns64ModeStatus('当前：DNS64 已启用');
+        return;
+      }
+      if (!adapter.ipv6Enabled) {
+        setDns64ModeStatus('当前：IPv6 未启用');
+        return;
+      }
+      if (adapter.ipv4Enabled) {
+        setDns64ModeStatus('当前：双栈');
+        return;
+      }
+      setDns64ModeStatus('当前：仅 v6');
+    }
+
+    function isFreeFlowModeActive(adapter) {
+      if (!adapter) {
+        return false;
+      }
+      if (adapter.freeFlow) {
+        return true;
+      }
+      if (dns64ModeState.pending?.enabled) {
+        return true;
+      }
+      return isDns64ModeActive(adapter);
+    }
+
+    async function applyDns64Mode(enabled) {
+      if (!dns64ModeToggleEl || !dns64ModeStateEl) {
+        return;
+      }
+      if (dns64ModeState.pending) {
+        dns64ModeToggleEl.checked = isDns64ModeActive(getSelectedAdapter(latestNetwork));
+        return;
+      }
+
+      const adapter = getSelectedAdapter(latestNetwork);
+      if (!adapter) {
+        setDns64ModeStatus('请先选择目标网卡');
+        return;
+      }
+
+      if (enabled && (pendingToggleState.warp || getStableWarpValue())) {
+        await applyWarpToggle(false);
+      }
+
+      const backupIpv6Servers = getDns64Backup(adapter);
+      dns64ModeState.backupIpv6Servers = backupIpv6Servers;
+      dns64ModeState.pending = { enabled, adapterName: adapter.name };
+      dns64ModeToggleEl.checked = enabled;
+      setBusy(true);
+      showConfigurationToast('DNS64 免流模式', enabled ? '正在开启 DNS64 免流模式' : '正在关闭 DNS64 免流模式');
+      setDns64ModeStatus(enabled ? '切换仅v6并配置DNS64...' : '恢复双栈并还原 DNS...');
+
+      try {
+        if (enabled) {
+          await postActionSilently('/api/v1/switch', { ifName: adapter.name, mode: 'ipv6' });
+          await postActionWithRollback('/api/v1/dns', { ifName: adapter.name, ipv6Servers: [DNS64_IPV6_RESOLVER] });
+          setDns64ModeStatus('当前：DNS64 已启用');
+        } else {
+          await postActionSilently('/api/v1/switch', { ifName: adapter.name, mode: 'both' });
+          if (dns64ModeState.backupIpv6Servers.length > 0) {
+            await postActionWithRollback('/api/v1/dns', { ifName: adapter.name, ipv6Servers: dns64ModeState.backupIpv6Servers });
+          }
+          setDns64ModeStatus('当前：双栈');
+        }
+        dns64ModeState.backupIpv6Servers = enabled ? backupIpv6Servers : [];
+        refreshStatus(true).catch(() => {});
+      } catch (err) {
+        try {
+          if (enabled) {
+            await postActionSilently('/api/v1/switch', { ifName: adapter.name, mode: 'both' });
+            if (backupIpv6Servers.length > 0) {
+              await postActionSilently('/api/v1/dns', { ifName: adapter.name, ipv6Servers: backupIpv6Servers });
+            }
+          } else {
+            await postActionSilently('/api/v1/switch', { ifName: adapter.name, mode: 'ipv6' });
+            await postActionSilently('/api/v1/dns', { ifName: adapter.name, ipv6Servers: [DNS64_IPV6_RESOLVER] });
+          }
+        } catch {
+          // best effort rollback
+        }
+        dns64ModeToggleEl.checked = isDns64ModeActive(getSelectedAdapter(latestNetwork));
+        setDns64ModeStatus(`切换失败：${err.message}`);
+        appendLog(`DNS64 免流模式切换失败：${err.message}`);
+        showConfigurationFailure(err.message);
+        throw err;
+      } finally {
+        dns64ModeState.pending = null;
+        dns64ModeToggleEl.disabled = false;
+        setBusy(false);
+        syncDns64ModeState(latestNetwork, true);
+      }
+    }
+
+    async function saveDnsEditor() {
+      if (dnsEditorState.saving) {
+        return;
+      }
+      const adapter = getSelectedAdapter(latestNetwork);
+      if (!adapter) {
+        setDnsStatus('请先选择目标网卡');
+        return;
+      }
+
+      const payload = { ifName: adapter.name };
+      if (adapter.ipv4Enabled) {
+        payload.ipv4Servers = parseDnsServers(dnsIpv4InputEl?.value || '');
+      }
+      if (adapter.ipv6Enabled) {
+        payload.ipv6Servers = parseDnsServers(dnsIpv6InputEl?.value || '');
+      }
+
+      if (!adapter.ipv4Enabled && !adapter.ipv6Enabled) {
+        setDnsStatus('当前网卡未启用 IPv4/IPv6，无法保存 DNS');
+        return;
+      }
+
+      dnsEditorState.saving = true;
+      setBusy(true);
+      syncDnsEditor(latestNetwork, true);
+      try {
+        const res = await fetch('/api/v1/dns', {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify(payload),
+        });
+        const data = await res.json();
+        if (!res.ok) {
+          throw new Error(data.error || 'request failed');
+        }
+        dnsEditorState.dirty.ipv4 = false;
+        dnsEditorState.dirty.ipv6 = false;
+        setDnsStatus('DNS 已保存');
+        appendLog('DNS 已保存');
+        refreshStatus(true).catch(() => {});
+      } catch (err) {
+        setDnsStatus(`保存失败：${err.message}`);
+        appendLog(`DNS 保存失败：${err.message}`);
+        showConfigurationFailure(err.message);
+        throw err;
+      } finally {
+        dnsEditorState.saving = false;
+        setBusy(false);
+        syncDnsEditor(latestNetwork, true);
+      }
     }
 
     function setIpv6CheckStatus(tone, text) {
@@ -1954,6 +2396,8 @@
       syncTargetAdapterSelects(getAdapterOptions(data?.network));
       renderNetwork(data?.network);
       updateStatusBadges(data?.network, force);
+      syncDnsEditor(data?.network, force);
+      syncDns64ModeState(data?.network, force);
     }
 
     function fmtIPList(arr) {
@@ -2095,7 +2539,7 @@
         return;
       }
       const adapter = network.adapters.find(a => a && a.name === ifName);
-      setFreeBadge(adapter?.freeFlow ? 'ok' : 'warn');
+      setFreeBadge(isFreeFlowModeActive(adapter) ? 'ok' : 'warn');
     }
 
     async function refreshStatus(force = false) {
@@ -2106,6 +2550,22 @@
         appendLog('状态已刷新');
       } catch (err) {
         appendLog(`状态刷新失败：${err.message}`);
+      }
+    }
+
+    async function checkAdminStatus() {
+      setAdminBadge('warn', '管理员权限检查中');
+      try {
+        const res = await fetch('/api/v1/status', { cache: 'no-store' });
+        const data = await res.json();
+        if (data.adminError) {
+          throw new Error(data.adminError);
+        }
+        const isAdmin = !!data.admin;
+        setAdminBadge(isAdmin ? 'ok' : 'warn', isAdmin ? '管理员权限：已启用' : '管理员权限：未启用');
+      } catch (err) {
+        setAdminBadge('err', '管理员权限：检查失败');
+        appendLog(`管理员权限检查失败：${err.message}`);
       }
     }
 
@@ -2173,6 +2633,16 @@
         warpToggleEl.checked = getStableWarpValue();
         return;
       }
+
+      if (enabled && dns64ModeState.pending) {
+        warpToggleEl.checked = getStableWarpValue();
+        return;
+      }
+
+      if (enabled && dns64ModeToggleEl && isDns64ModeActive(getSelectedAdapter(latestNetwork))) {
+        await applyDns64Mode(false);
+      }
+
       showConfigurationToast('WARP', enabled ? '正在开启 WARP 连接' : '正在关闭 WARP 连接');
       markPendingToggle('warp', enabled, 'warp.ok');
       warpToggleEl.checked = getStableWarpValue();
@@ -2200,7 +2670,7 @@
         easyModeToggleEl.checked = getStableEasyModeValue();
         return;
       }
-      showConfigurationToast('免流模式', enabled ? '正在开启免流模式' : '正在关闭免流模式');
+      showConfigurationToast('免流模式', enabled ? '正在开启Warp免流模式' : '正在关闭Warp免流模式');
       markPendingToggle('easyMode', enabled, enabled ? 'warp.ok' : 'switch.ok');
       easyModeToggleEl.checked = getStableEasyModeValue();
       setText(easyModeStateEl, enabled ? '正在开启...' : '正在关闭...');
@@ -2311,6 +2781,12 @@
       });
     }
 
+    if (dns64ModeToggleEl) {
+      dns64ModeToggleEl.addEventListener('change', () => {
+        applyDns64Mode(dns64ModeToggleEl.checked).catch(() => {});
+      });
+    }
+
     if (warpToggleEl) {
       warpToggleEl.addEventListener('change', () => {
         applyWarpToggle(warpToggleEl.checked).catch(() => {});
@@ -2326,6 +2802,47 @@
     if (ipv6RefreshBtnEl) {
       ipv6RefreshBtnEl.addEventListener('click', () => {
         checkIpv6Address().catch(() => {});
+      });
+    }
+
+    if (dnsIpv4InputEl) {
+      dnsIpv4InputEl.addEventListener('input', () => {
+        dnsEditorState.dirty.ipv4 = dnsIpv4InputEl.value !== dnsEditorState.committed.ipv4;
+        syncDnsEditor(latestNetwork);
+      });
+      dnsIpv4InputEl.addEventListener('keydown', (event) => {
+        if (event.key === 'Enter') {
+          event.preventDefault();
+          saveDnsEditor().catch(() => {});
+        }
+      });
+    }
+
+    if (dnsIpv6InputEl) {
+      dnsIpv6InputEl.addEventListener('input', () => {
+        dnsEditorState.dirty.ipv6 = dnsIpv6InputEl.value !== dnsEditorState.committed.ipv6;
+        syncDnsEditor(latestNetwork);
+      });
+      dnsIpv6InputEl.addEventListener('keydown', (event) => {
+        if (event.key === 'Enter') {
+          event.preventDefault();
+          saveDnsEditor().catch(() => {});
+        }
+      });
+    }
+
+    if (dnsCardEl) {
+      dnsCardEl.addEventListener('focusout', (event) => {
+        if (dnsEditorState.saving) {
+          return;
+        }
+        const nextTarget = event.relatedTarget;
+        if (nextTarget && dnsCardEl.contains(nextTarget)) {
+          return;
+        }
+        if (dnsEditorState.dirty.ipv4 || dnsEditorState.dirty.ipv6) {
+          saveDnsEditor().catch(() => {});
+        }
       });
     }
 
@@ -2379,7 +2896,10 @@
     showInitializationToast();
 
     refreshStatus(true);
-    window.addEventListener('load', scheduleDeferredStartupTasks, { once: true });
+    window.addEventListener('load', () => {
+      scheduleDeferredStartupTasks();
+      checkAdminStatus().catch(() => {});
+    }, { once: true });
     setInterval(refreshTrafficUsage, 60000);
     connectWS();
   </script>

@@ -599,6 +599,124 @@ func setAdapterBindingState(ifName, componentID string, enabled bool) (string, e
 	return execWithTimeout(ctx, "powershell", "-NoProfile", "-NonInteractive", "-Command", psCmd)
 }
 
+func escapePowerShellSingleQuotedString(value string) string {
+	return strings.ReplaceAll(value, "'", "''")
+}
+
+func joinPowerShellStringArray(values []string) string {
+	if len(values) == 0 {
+		return "@()"
+	}
+	parts := make([]string, 0, len(values))
+	for _, value := range values {
+		parts = append(parts, fmt.Sprintf("'%s'", escapePowerShellSingleQuotedString(value)))
+	}
+	return "@(" + strings.Join(parts, ",") + ")"
+}
+
+func normalizeDnsServerList(values []string) ([]string, error) {
+	servers := make([]string, 0, len(values))
+	seen := make(map[string]struct{}, len(values))
+	for _, value := range values {
+		trimmed := strings.TrimSpace(value)
+		if trimmed == "" {
+			continue
+		}
+		candidate := trimmed
+		if idx := strings.Index(candidate, "%"); idx >= 0 {
+			candidate = candidate[:idx]
+		}
+		if net.ParseIP(candidate) == nil {
+			return nil, fmt.Errorf("invalid dns server: %s", trimmed)
+		}
+		if _, ok := seen[trimmed]; ok {
+			continue
+		}
+		seen[trimmed] = struct{}{}
+		servers = append(servers, trimmed)
+	}
+	return servers, nil
+}
+
+func splitDnsServersByFamily(values []string) ([]string, []string) {
+	ipv4 := make([]string, 0, len(values))
+	ipv6 := make([]string, 0, len(values))
+	for _, value := range values {
+		trimmed := strings.TrimSpace(value)
+		if trimmed == "" {
+			continue
+		}
+		if strings.Contains(trimmed, ":") {
+			ipv6 = append(ipv6, trimmed)
+			continue
+		}
+		ipv4 = append(ipv4, trimmed)
+	}
+	return ipv4, ipv6
+}
+
+func getAdapterDnsServers(ifName string) ([]string, error) {
+	ctx, cancel := context.WithTimeout(context.Background(), 8*time.Second)
+	defer cancel()
+
+	psCmd := fmt.Sprintf("Get-DnsClientServerAddress | Where-Object { $_.InterfaceAlias -eq '%s' } | Select-Object InterfaceAlias, ServerAddresses | ConvertTo-Json -Compress", escapePowerShellSingleQuotedString(ifName))
+	raw, err := execWithTimeout(ctx, "powershell", "-NoProfile", "-NonInteractive", "-Command", psCmd)
+	if err != nil && strings.TrimSpace(raw) == "" {
+		return nil, err
+	}
+	dnsInfos, err := decodeJSONList[dnsInfo](raw)
+	if err != nil {
+		return nil, err
+	}
+	servers := make([]string, 0)
+	seen := make(map[string]struct{})
+	for _, info := range dnsInfos {
+		for _, server := range normalizeStringSlice(info.ServerAddresses) {
+			if _, ok := seen[server]; ok {
+				continue
+			}
+			seen[server] = struct{}{}
+			servers = append(servers, server)
+		}
+	}
+	return servers, nil
+}
+
+func setAdapterDnsServers(ifName string, servers []string) (string, error) {
+	ctx, cancel := context.WithTimeout(context.Background(), 12*time.Second)
+	defer cancel()
+
+	psCmd := fmt.Sprintf("Set-DnsClientServerAddress -InterfaceAlias '%s' -ServerAddresses %s -Confirm:$false -ErrorAction Stop", escapePowerShellSingleQuotedString(ifName), joinPowerShellStringArray(servers))
+	return execWithTimeout(ctx, "powershell", "-NoProfile", "-NonInteractive", "-Command", psCmd)
+}
+
+func applyDnsServers(ifName string, ipv4Servers, ipv6Servers *[]string) (string, error) {
+	currentServers, err := getAdapterDnsServers(ifName)
+	if err != nil {
+		return "", err
+	}
+	currentIPv4, currentIPv6 := splitDnsServersByFamily(currentServers)
+
+	nextIPv4 := currentIPv4
+	if ipv4Servers != nil {
+		nextIPv4, err = normalizeDnsServerList(*ipv4Servers)
+		if err != nil {
+			return "", err
+		}
+	}
+
+	nextIPv6 := currentIPv6
+	if ipv6Servers != nil {
+		nextIPv6, err = normalizeDnsServerList(*ipv6Servers)
+		if err != nil {
+			return "", err
+		}
+	}
+
+	combined := append(append(make([]string, 0, len(nextIPv4)+len(nextIPv6)), nextIPv4...), nextIPv6...)
+	return setAdapterDnsServers(ifName, combined)
+}
+
 func applyNetworkMode(ifName, mode string) (string, error) {
 	prevIPv4, _ := getAdapterBindingState(ifName, "ms_tcpip")
 	prevIPv6, _ := getAdapterBindingState(ifName, "ms_tcpip6")
@@ -793,6 +911,61 @@ func WarpHandler(hub *events.Hub) http.HandlerFunc {
 	}
 }
 
+func DnsHandler(hub *events.Hub) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost {
+			writeJSON(w, map[string]string{"error": "method not allowed"}, http.StatusMethodNotAllowed)
+			return
+		}
+
+		var payload struct {
+			IfName      string    `json:"ifName"`
+			IPv4Servers *[]string `json:"ipv4Servers"`
+			IPv6Servers *[]string `json:"ipv6Servers"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&payload); err != nil {
+			writeJSON(w, map[string]string{"error": "invalid json"}, http.StatusBadRequest)
+			notify(hub, "dns.error", "invalid request body", nil)
+			return
+		}
+
+		ok, _ := isAdmin()
+		if !ok {
+			writeJSON(w, map[string]string{"error": "admin required"}, http.StatusForbidden)
+			notify(hub, "dns.error", "administrator privilege required", payload)
+			return
+		}
+
+		if strings.TrimSpace(payload.IfName) == "" {
+			writeJSON(w, map[string]string{"error": "missing ifName"}, http.StatusBadRequest)
+			notify(hub, "dns.error", "missing ifName", payload)
+			return
+		}
+		if payload.IPv4Servers == nil && payload.IPv6Servers == nil {
+			writeJSON(w, map[string]string{"error": "no dns changes provided"}, http.StatusBadRequest)
+			notify(hub, "dns.error", "no dns changes provided", payload)
+			return
+		}
+
+		out, err := applyDnsServers(payload.IfName, payload.IPv4Servers, payload.IPv6Servers)
+		if err != nil {
+			writeJSON(w, map[string]interface{}{"error": "command failed", "detail": err.Error(), "output": out}, http.StatusInternalServerError)
+			notify(hub, "dns.error", "failed to update dns servers", map[string]interface{}{
+				"request": payload,
+				"detail":  err.Error(),
+				"output":  out,
+			})
+			return
+		}
+
+		writeJSON(w, map[string]interface{}{"ok": true, "output": out}, http.StatusOK)
+		notify(hub, "dns.ok", "dns servers updated", map[string]interface{}{
+			"request": payload,
+			"output":  strings.TrimSpace(out),
+		})
+	}
+}
+
 var errUnknownWarpAction = errors.New("unknown warp action")
 
 func applyWarpAction(ctx context.Context, action string) (string, error) {
@@ -915,6 +1088,11 @@ func StatusHandler(hub *events.Hub) http.HandlerFunc {
 		if hasLast {
 			lastEvent = last
 		}
+		admin, adminErr := isAdmin()
+		var adminErrMsg string
+		if adminErr != nil {
+			adminErrMsg = adminErr.Error()
+		}
 		network, netErr := collectNetworkSnapshot()
 		var netErrMsg string
 		if netErr != nil {
@@ -925,6 +1103,8 @@ func StatusHandler(hub *events.Hub) http.HandlerFunc {
 				"name":    "BKNetwork",
 				"version": "dev",
 			},
+			"admin":      admin,
+			"adminError": adminErrMsg,
 			"connection": map[string]interface{}{
 				"websocket": "/ws",
 			},
