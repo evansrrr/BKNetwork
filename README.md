@@ -1,44 +1,89 @@
 BKNetwork
 =========
 
-BKNetwork 是一个用于 Windows 的轻量级本地后台服务模板，带有内置的 Web 管理界面，用于管理网卡绑定、Cloudflare WARP 等功能。
+BKNetwork 是一个用于 Windows x64 的轻量级本地后台服务，带有内置 Web 管理界面，用于简化用户针对北科校园网络的管理。
 
-**下载与安装**
+仅在 Win11 测试，不保证支持 Win10 使用。
 
-在 Release 页面下载最新版 `BKNetwork.zip` 压缩包，解压后可直接运行 `bknetwork.exe`
+## 下载与安装
 
-**快速上手**
+在右侧栏 Releases 页面下载带版本号的 `.zip` 压缩包，解压后双击运行 `bknetwork.exe`，首次运行需要点击弹窗中 `更多信息` 并确定继续运行。这是因为软件没有微软签名，不必担心。
 
-在开发机器上可用以下命令直接运行（无需提前构建）：
+## 使用说明
 
-```powershell
-cd BKNetwork
-go run ./cmd/bknetwork
-```
+运行软件后会在系统托盘中显示图标，单击打开网页管理界面（`http://localhost:13335`），右键点击 `退出` 即可退出软件。
 
-运行后会在本地监听默认地址（参见代码中的 Server 配置），并将 `web` 目录中的前端文件作为静态资源提供。
+**免流模式** 包含 `Warp 免流模式` 和 `DNS64 免流模式`，最多同时启用一个。
 
-**构建二进制**
+切换到 **高级模式** 显示更详细的网络状态与控制选项，方便进行详细控制与测试。
 
-在项目根目录执行（会在当前目录生成 `bknetwork.exe`）：
+**设置** 页面可设置软件开机自启、静默启动、Warp 客户端开机自启等。
 
-```powershell
+注：退出软件或关机时不会自动恢复网络状态，请手动切换免流。
+
+**任何免流方式都是功能大于体验！！！**
+
+## 常见问题 FAQ
+
+1. 免流模式真的能实现免流吗？
+   
+   - 包的老弟。使用 ipv6 不计费，具体原理在我博客。
+
+2. 两个免流模式有什么区别？
+   
+   - `Warp 免流模式`：网速快，延迟较低，极少情况可能不稳定，steam和wegame可以下载。需要安装 Cloudflare WARP 客户端。
+   - `DNS64 免流模式`：原生 ipv6 直连表现良好，但原本不支持 ipv6 的网站较慢，少数应用无法使用。
+
+3. 无法使用Warp免流
+   
+   - 确认 Cloudflare WARP 客户端已安装，且在 PATH 中可访问。
+   - 更换一个 ipv6 DNS，比如 Cloudflare 和阿里的。
+   - 类似 VMware 和 Tailscale 的虚拟网卡会干扰 Warp 的 DNS 连接，请禁用这些虚拟网卡。
+   - Warp确实偶尔连不上，稍后再试。
+
+4. 免流模式不能访问校园网内网（例如校园网登录页）
+   
+   - 免流模式为仅 ipv6，而校园网内网资源仅支持 ipv4，如需访问请先关闭免流。
+
+5. 实时流量监控
+   
+   - 推荐 [Sniffnet](https://sniffnet.net/)
+
+6. 无法初始化
+   
+   - 一些开发环境如 `vue.js` 可能影响，请自行排除。
+
+7. 反馈 Bug & 建议
+   
+   - 欢迎提 issue。或者问问你的 ai 朋友（们）
+
+## 开发者指南
+
+**构建二进制文件**
+
+在项目根目录执行：
+
+```bash
 cd BKNetwork
 go build -o bknetwork.exe ./cmd/bknetwork
 ```
 
+当前目录会生成 `bknetwork.exe`。
+
 在 Windows 上构建并打包为服务或分发给别的机器时，建议在与目标平台相同的环境中构建（比如使用带有相同 GOOS/GOARCH 的交叉编译或在目标 Windows 主机上构建）。
 
-如果要连同最新前端一起发布，请使用仓库里的发布脚本，它会先同步 `web/` 再构建可分发目录和 zip：
+如果要连同最新前端一起发布，请使用仓库里的发布脚本，它会先同步 `web/` 再构建可分发目录和 zip 压缩包：
 
-```powershell
+```bash
 cd BKNetwork
 .\scripts\build-release.ps1
 ```
 
-脚本输出的发布目录里会包含 `bknetwork.exe` 和最新的 `web/`，因此程序运行时会自动加载同步后的前端页面。
+或右键使用 powershell 运行。
 
-示例（在非 Windows 上交叉编译 Windows 可执行文件）：
+`release/` 目录里会包含 `bknetwork.exe` 和最新的 `web/`，程序运行时会自动加载同步后的前端页面。
+
+在非 Windows 平台上交叉编译 Windows x64 二进制文件：
 
 ```bash
 # 在 Linux/macOS 环境交叉编译为 Windows amd64
@@ -49,13 +94,13 @@ GOOS=windows GOARCH=amd64 go build -o bknetwork.exe ./cmd/bknetwork
 
 生成 `bknetwork.exe` 后，使用管理员权限运行安装命令：
 
-```powershell
+```bash
 # 以管理员身份打开 PowerShell
 .\bknetwork.exe install
 .\bknetwork.exe start
 ```
 
-程序使用 `github.com/kardianos/service` 做为服务包装，安装/启动/停止命令均由可执行文件暴露（参见 `cmd/bknetwork` 目录下的实现）。
+程序使用 `github.com/kardianos/service` 做为服务包装，安装/启动/停止命令均由可执行文件暴露（参见 `cmd/bknetwork` 目录下的实现）
 
 **HTTP / WebSocket 接口**
 
@@ -64,7 +109,9 @@ GOOS=windows GOARCH=amd64 go build -o bknetwork.exe ./cmd/bknetwork
 - 控制接口：`/api/v1/switch`（切换 IPv4/IPv6）、`/api/v1/warp`（控制 warp-cli），均为 POST 请求。
 - 实时事件：WebSocket 路径为 `/ws`，会发送 `hello`、`network.status`、`heartbeat` 等事件。
 
-注意：改变网络绑定或控制 `warp-cli` 的命令需要以管理员权限执行，接口会在权限不足或命令不可用时返回错误信息并通过 WebSocket 发布事件。
+注：改变网络绑定或控制 `warp-cli` 的命令需要以管理员权限执行，接口会在权限不足或命令不可用时返回错误信息并通过 WebSocket 发布事件。
+
+具体api以后会写
 
 **常见问题与排查**
 
@@ -83,11 +130,31 @@ go test ./...
 
 **目录结构（相关）**
 
-- `cmd/bknetwork` — 程序入口与平台相关的包装代码（服务安装、桌面集成等）。
-- `internal/handlers` — HTTP 处理器，包含网络快照采集、warp 控制等逻辑。
-- `internal/events` — 事件总线，用于将事件广播到 WebSocket 订阅者。
-- `web/` — 前端静态资源（UI、SVG、CSS、JS）。
+- `cmd/bknetwork` — 程序入口与平台相关的包装代码（服务安装、桌面集成等）
+- `internal/handlers` — HTTP 处理器，包含网络快照采集、warp 控制等逻辑
+- `internal/events` — 事件总线，用于将事件广播到 WebSocket 订阅者
+- `web/` — 前端静态资源
 
-**许可**
+## 免责声明
+
+本软件仅供学习和研究使用，请勿用于任何非法用途。使用本软件产生的一切后果由用户自行承担。
+
+具体包括但不限于：
+
+- 本软件对因使用或无法使用而导致的任何直接、间接、特殊、偶然或后果性损害不承担责任，包括但不限于数据丢失、业务中断或利润损失。
+- 开发者不保证本软件适用于任何特定目的，也不保证本软件完全没有缺陷或错误。
+- 用户应当遵守相关法律法规使用本软件，不得利用本软件进行任何非法或违规操作。
+- 用户应在遵守校园网及相关网络工具使用条款和规定的前提下使用本软件，开发者不对用户违规使用的行为及其后果负责。
+- 因使用本软件而导致的账号被限制、设备被隔离或其他损失，开发者不承担任何责任。
+
+使用本软件即表示你已充分理解并同意本免责声明的全部条款。
+
+## 开源许可
 
 本项目采用 MIT 许可。
+
+---
+
+请我杯喝的twt
+
+![reward.jpg](https://img.ich.cc.cd/file/ichblog/img/reward.jpg)
