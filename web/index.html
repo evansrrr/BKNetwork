@@ -26,6 +26,11 @@
       --card-surface-strong: #ffffff;
       --card-shadow-soft: 0 12px 30px rgba(15,23,42,0.08);
       --card-shadow-strong: 0 16px 36px rgba(15,23,42,0.12);
+      --motion-ease-out: cubic-bezier(0.22, 1, 0.36, 1);
+      --motion-ease-emphatic: cubic-bezier(0.16, 1, 0.3, 1);
+      --motion-duration-fast: 200ms;
+      --motion-duration-medium: 300ms;
+      --motion-duration-slow: 420ms;
     }
 
     @media (prefers-color-scheme: dark) {
@@ -84,6 +89,12 @@
       overflow-y: auto;
     }
 
+    body.advanced-mode {
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+    }
+
     body::before {
       content: '';
       position: fixed;
@@ -128,6 +139,11 @@
       padding: 28px 18px 36px;
       position: relative;
       z-index: 1;
+    }
+
+    body.advanced-mode .shell {
+      flex: 1 0 auto;
+      width: 100%;
     }
 
     .hero {
@@ -182,7 +198,11 @@
       backdrop-filter: blur(18px);
       color: var(--fg);
       text-decoration: none;
-      transition: transform 0.2s ease, border-color 0.2s ease, background 0.2s ease;
+      transition:
+        transform var(--motion-duration-medium) var(--motion-ease-out),
+        border-color var(--motion-duration-medium) var(--motion-ease-out),
+        background var(--motion-duration-medium) var(--motion-ease-out),
+        box-shadow var(--motion-duration-medium) var(--motion-ease-out);
     }
 
     .settings-fab {
@@ -202,12 +222,17 @@
       backdrop-filter: blur(18px);
       color: var(--fg);
       cursor: pointer;
-      transition: transform 0.2s ease, border-color 0.2s ease, background 0.2s ease;
+      transition:
+        transform var(--motion-duration-medium) var(--motion-ease-out),
+        border-color var(--motion-duration-medium) var(--motion-ease-out),
+        background var(--motion-duration-medium) var(--motion-ease-out),
+        box-shadow var(--motion-duration-medium) var(--motion-ease-out);
     }
 
     .settings-fab:hover {
-      transform: translateY(-2px) scale(1.03);
+      transform: translateY(-2px) scale(1.02);
       border-color: color-mix(in srgb, var(--accent-2) 30%, var(--line-strong));
+      box-shadow: 0 15px 30px rgba(0,0,0,0.10);
     }
 
     .settings-fab:focus-visible {
@@ -222,8 +247,9 @@
     }
 
     .github-fab:hover {
-      transform: translateY(-2px) scale(1.03);
+      transform: translateY(-2px) scale(1.02);
       border-color: color-mix(in srgb, var(--accent) 30%, var(--line-strong));
+      box-shadow: 0 15px 30px rgba(0,0,0,0.10);
     }
 
     .github-fab:focus-visible {
@@ -427,20 +453,17 @@
     }
 
     .mini .label {
-      display: inline-flex;
-      align-items: center;
-      gap: 6px;
-      width: fit-content;
-      padding: 4px 8px;
+      display: block;
+      width: auto;
+      padding: 0;
       margin-bottom: 6px;
-      border-radius: 999px;
-      border: 1px solid color-mix(in srgb, var(--accent) 30%, var(--line));
-      background: color-mix(in srgb, var(--accent) 16%, var(--bg-elev));
-      color: color-mix(in srgb, var(--accent) 88%, var(--fg));
+      border: 0;
+      background: none;
+      color: color-mix(in srgb, var(--accent) 82%, var(--fg));
       font-size: 12px;
-      text-transform: uppercase;
-      letter-spacing: 0.08em;
-      box-shadow: 0 8px 18px rgba(0,0,0,0.04);
+      text-transform: none;
+      letter-spacing: 0;
+      box-shadow: none;
     }
 
     .dot {
@@ -472,15 +495,22 @@
 
     .mini-link {
       display: block;
+      position: relative;
       color: inherit;
       text-decoration: none;
-      transition: transform .18s ease, box-shadow .18s ease, border-color .18s ease;
+      transition:
+        transform var(--motion-duration-medium) var(--motion-ease-out),
+        box-shadow var(--motion-duration-medium) var(--motion-ease-out),
+        border-color var(--motion-duration-medium) var(--motion-ease-out),
+        background var(--motion-duration-medium) var(--motion-ease-out);
     }
 
     .mini-link:hover {
-      transform: translateY(-1px);
+      transform: translateY(-2px);
       border-color: var(--line-strong);
-      box-shadow: 0 14px 32px rgba(0,0,0,0.07);
+      box-shadow:
+        0 14px 30px rgba(0,0,0,0.08),
+        0 0 16px rgba(96,165,250,0.12);
     }
 
     .mini .value {
@@ -558,7 +588,11 @@
       font-size: 16px;
       font-weight: 700;
       letter-spacing: -0.01em;
-      transition: border-color 0.18s ease, box-shadow 0.18s ease, background 0.18s ease, transform 0.18s ease;
+      transition:
+        border-color var(--motion-duration-fast) var(--motion-ease-out),
+        box-shadow var(--motion-duration-fast) var(--motion-ease-out),
+        background var(--motion-duration-fast) var(--motion-ease-out),
+        transform var(--motion-duration-fast) var(--motion-ease-out);
     }
 
     .control-value .target-adapter-select:hover {
@@ -608,7 +642,21 @@
       color: var(--fg);
       background: var(--card-surface);
       border: 1px solid color-mix(in srgb, var(--line-strong) 72%, transparent);
-      box-shadow: inset 0 1px 0 rgba(255,255,255,0.16);
+      box-shadow: var(--card-shadow-soft);
+      transition:
+        transform 300ms var(--motion-ease-out),
+        border-color 300ms var(--motion-ease-out),
+        background 300ms var(--motion-ease-out),
+        box-shadow 300ms var(--motion-ease-out),
+        color 300ms var(--motion-ease-out);
+    }
+
+    .mode-option:hover {
+      transform: translateY(-1px);
+      border-color: color-mix(in srgb, var(--accent-2) 34%, var(--line-strong));
+      box-shadow:
+        0 14px 28px rgba(0,0,0,0.07),
+        0 0 14px rgba(96,165,250,0.10);
     }
 
     .mode-option::after {
@@ -623,18 +671,26 @@
       background: transparent;
       box-shadow: none;
       flex: 0 0 auto;
+      transition:
+        background 300ms var(--motion-ease-out),
+        border-color 300ms var(--motion-ease-out),
+        box-shadow 300ms var(--motion-ease-out),
+        transform 300ms var(--motion-ease-out);
     }
 
     .mode-option.active {
       border-color: color-mix(in srgb, var(--accent-2) 44%, var(--line));
       background: var(--card-surface-strong);
-      box-shadow: var(--card-shadow-strong), inset 0 1px 0 rgba(255,255,255,0.18);
+      box-shadow:
+        var(--card-shadow-strong),
+        0 0 16px rgba(96,165,250,0.10);
     }
 
     .mode-option.active .mode-dot {
       border-color: var(--accent-2);
       background: var(--accent-2);
       box-shadow: 0 0 0 5px color-mix(in srgb, var(--accent-2) 18%, transparent);
+      transform: scale(1.02);
     }
 
     .mode-state,
@@ -749,22 +805,25 @@
       cursor: pointer;
       background: linear-gradient(135deg, var(--accent-2), var(--accent));
       box-shadow: 0 12px 28px rgba(37,99,235,0.18);
-      transition: transform .16s ease, opacity .16s ease, box-shadow .16s ease, filter .16s ease;
+      transition:
+        transform 320ms var(--motion-ease-out),
+        opacity 320ms var(--motion-ease-out),
+        box-shadow 320ms var(--motion-ease-out),
+        filter 320ms var(--motion-ease-out);
       position: relative;
-      overflow: hidden;
     }
 
-    button::after {
-      content: '';
-      position: absolute;
-      inset: 0;
-      background: linear-gradient(120deg, transparent 0%, rgba(255,255,255,0.18) 50%, transparent 100%);
-      transform: translateX(-120%);
-      transition: transform .35s ease;
+    button:hover:not(:disabled) {
+      transform: translateY(-1px) scale(1.003);
+      filter: saturate(1.01) brightness(1.005);
+      box-shadow:
+        0 14px 24px rgba(37,99,235,0.14),
+        0 0 18px rgba(96,165,250,0.18);
     }
 
-    button:hover:not(:disabled)::after { transform: translateX(120%); }
-    button:hover:not(:disabled) { transform: translateY(-1px); filter: saturate(1.02); }
+    button:active:not(:disabled) {
+      transform: translateY(0) scale(0.99);
+    }
 
     button.secondary {
       background: linear-gradient(135deg, color-mix(in srgb, var(--bg-soft) 82%, #fff), color-mix(in srgb, var(--bg-soft) 58%, #000));
@@ -817,14 +876,24 @@
       padding: 14px;
       display: grid;
       gap: 8px;
-      box-shadow: var(--card-shadow-soft), inset 0 1px 0 rgba(255,255,255,0.16);
-      transition: transform .18s ease, box-shadow .18s ease, border-color .18s ease;
+      box-shadow: var(--card-shadow-soft);
+      transition:
+        transform 380ms var(--motion-ease-out),
+        box-shadow 380ms var(--motion-ease-out),
+        border-color 380ms var(--motion-ease-out);
+      position: relative;
     }
 
     .adapter-card:hover {
-      transform: translateY(-2px);
+      transform: translateY(-1px);
       border-color: var(--line-strong);
-      box-shadow: var(--card-shadow-strong), inset 0 1px 0 rgba(255,255,255,0.18);
+    }
+
+    .adapter-card:hover {
+      box-shadow:
+        0 14px 28px rgba(0,0,0,0.07),
+        0 0 18px rgba(45,212,191,0.08),
+        0 0 0 1px rgba(255,255,255,0.03);
     }
 
     .adapter-head {
@@ -893,10 +962,10 @@
       }
 
       .mini .label {
-        border-color: color-mix(in srgb, var(--accent) 34%, var(--line));
-        background: color-mix(in srgb, var(--accent) 22%, var(--bg-elev));
+        border: 0;
+        background: none;
         color: color-mix(in srgb, var(--accent) 94%, white 6%);
-        box-shadow: 0 10px 22px rgba(0,0,0,0.18);
+        box-shadow: none;
       }
 
       .pill {
@@ -1058,6 +1127,13 @@
       font-size: 12px;
       color: var(--muted);
       pointer-events: auto;
+    }
+
+    body.advanced-mode .site-footer {
+      position: static;
+      margin-top: auto;
+      padding: 12px 0 16px;
+      z-index: 1;
     }
 
     .site-footer a {
@@ -1312,13 +1388,15 @@
       align-items: center;
       justify-content: center;
       cursor: pointer;
-      transition: color 0.18s ease, transform 0.18s ease;
+      transition:
+        color var(--motion-duration-fast) var(--motion-ease-out),
+        transform var(--motion-duration-fast) var(--motion-ease-out);
       flex: 0 0 auto;
     }
 
     .ipv6-refresh:hover {
       color: var(--fg);
-      transform: rotate(22deg);
+      transform: rotate(16deg) scale(1.04);
     }
 
     .ipv6-refresh:focus-visible {
@@ -2318,6 +2396,9 @@
         }
         dns64ModeState.backupIpv6Servers = enabled ? backupIpv6Servers : [];
         refreshStatus(true).catch(() => {});
+        if (enabled) {
+          checkIpv6Address().catch(() => {});
+        }
         showConfigurationSuccess();
       } catch (err) {
         try {
@@ -2837,6 +2918,9 @@
       setBusy(true);
       try {
         await postActionSilently('/api/v1/warp', { action: enabled ? 'start' : 'stop' });
+        if (enabled) {
+          checkIpv6Address().catch(() => {});
+        }
       } catch (err) {
         clearPendingToggle('warp');
         warpToggleEl.checked = getStableWarpValue();
