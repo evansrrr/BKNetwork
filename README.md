@@ -3,9 +3,9 @@ BKNetwork
 
 BKNetwork 是一个轻量级本地后台服务，带有内置 Web 管理界面，用于简化用户针对北科校园网络的部分管理，并提供免流功能。
 
-**仅支持 Windows x64** 系统。
+**仅支持 Windows x64** 系统。仅在 Win11 测试，不保证支持 Win10 使用。
 
-仅在 Win11 测试，不保证支持 Win10 使用。
+[TG Group](https://t.me/ernst_loosen_bot/)
 
 ## 下载与安装
 
@@ -176,6 +176,10 @@ go test ./...
 
 ---
 
-请我杯喝的QwQ
+感谢支持！请我杯喝的QwQ
 
 ![reward.jpg](https://img.ich.cc.cd/file/ichblog/img/reward.jpg)
+
+- **Sponsors**：
+
+  H*
