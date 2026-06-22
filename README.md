@@ -7,6 +7,12 @@ BKNetwork 是一个轻量级本地后台服务，带有内置 Web 管理界面�
 
 [TG Group](https://t.me/ernst_loosen_bot/)
 
+[博客](https://ich.cc.cd/2026/06/22/bknetwork/)
+
+[Github：evansrrr/BKNetwork](https://github.com/evansrrr/BKNetwork)
+
+[Gitee：evansrrr/BKNetwork](https://gitee.com/evansrrr/BKNetwork)
+
 ## 下载与安装
 
 在右侧栏 [Releases](https://github.com/evansrrr/BKNetwork/releases/latest) 页面下载带版本号的 `.zip` 压缩包，解压后双击运行 `bknetwork.exe`，首次运行需要点击弹窗中 `更多信息` 并确定继续运行。这是因为软件没有微软签名，不必担心。如果遇到提示需要管理员权限，请选择同意。
