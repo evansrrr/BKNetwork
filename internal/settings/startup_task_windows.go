@@ -52,6 +52,9 @@ func registerStartupTask(taskName, executablePath, arguments string) error {
 	if triggerUser != "" {
 		triggerClause = fmt.Sprintf("-AtLogOn -User %s", psQuote(triggerUser))
 	}
+	// Register the scheduled task to run with highest privileges so the
+	// application has administrator rights at startup for internal PowerShell
+	// operations that require elevation.
 	script := fmt.Sprintf(
 		"$action = New-ScheduledTaskAction -Execute %s -Argument %s -WorkingDirectory %s; $trigger = New-ScheduledTaskTrigger %s; $principal = New-ScheduledTaskPrincipal -UserId %s -LogonType Interactive -RunLevel Highest; $settings = New-ScheduledTaskSettingsSet -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries -StartWhenAvailable; Register-ScheduledTask -TaskName %s -Action $action -Trigger $trigger -Principal $principal -Settings $settings -Force | Out-Null",
 		psQuote(executablePath),

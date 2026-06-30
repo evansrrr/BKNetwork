@@ -531,7 +531,12 @@ func runtimeUnlockThread() {
 }
 
 func openBrowserURL(url string) error {
-	cmd := exec.Command("rundll32", "url.dll,FileProtocolHandler", url)
+	// Use explorer.exe to open the URL via the user's shell. This ensures the
+	// browser is launched in the interactive user's context (non-elevated)
+	// instead of inheriting this process' elevated privileges which can
+	// cause browsers to open a separate/temporary profile and appear to lose
+	// cookies.
+	cmd := exec.Command("explorer.exe", url)
 	cmd.SysProcAttr = &syscall.SysProcAttr{HideWindow: true}
 	return cmd.Start()
 }
