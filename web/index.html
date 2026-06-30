@@ -1769,6 +1769,7 @@
     const settingsStatusEl = document.getElementById('settingsStatus');
     const stackModeStateEl = document.getElementById('stackModeState');
     const dnsCardEl = document.getElementById('dnsCard');
+    const appVersionEl = document.querySelector('.lead');
     const dnsIpv4InputEl = document.getElementById('dnsIpv4Input');
     const dnsIpv6InputEl = document.getElementById('dnsIpv6Input');
     const dnsStatusEl = document.getElementById('dnsStatus');
@@ -1798,6 +1799,7 @@
     const operationToastState = {
       hideTimer: null,
       initializationDone: false,
+      versionCheckStarted: false,
     };
     const fastStatusRefreshState = {
       intervalId: null,
@@ -2058,6 +2060,12 @@
       }
       operationToastState.initializationDone = true;
       showOperationToast('初始化成功！', '页面状态已同步完成', 'success', 1800);
+      if (!operationToastState.versionCheckStarted) {
+        operationToastState.versionCheckStarted = true;
+        window.setTimeout(() => {
+          checkForNewVersion().catch(() => {});
+        }, 0);
+      }
     }
 
     function showConfigurationToast(label, detail) {
@@ -2070,6 +2078,106 @@
 
     function showConfigurationFailure(message) {
       showOperationToast('配置失败', message || '请稍后重试', 'warn', 2400);
+    }
+
+    function getCurrentVersionText() {
+      return appVersionEl?.textContent?.trim() || '';
+    }
+
+    function parseVersion(version) {
+      const match = String(version || '').trim().match(/(?:tag\/)?v?(\d+)\.(\d+)\.(\d+)(?:-([0-9A-Za-z.-]+))?/);
+      if (!match) {
+        return null;
+      }
+      return {
+        major: Number(match[1]),
+        minor: Number(match[2]),
+        patch: Number(match[3]),
+        prerelease: match[4] || '',
+      };
+    }
+
+    function compareVersions(leftVersion, rightVersion) {
+      const left = parseVersion(leftVersion);
+      const right = parseVersion(rightVersion);
+      if (!left || !right) {
+        return null;
+      }
+      if (left.major !== right.major) {
+        return left.major - right.major;
+      }
+      if (left.minor !== right.minor) {
+        return left.minor - right.minor;
+      }
+      if (left.patch !== right.patch) {
+        return left.patch - right.patch;
+      }
+      if (left.prerelease === right.prerelease) {
+        return 0;
+      }
+      if (!left.prerelease) {
+        return 1;
+      }
+      if (!right.prerelease) {
+        return -1;
+      }
+      return left.prerelease.localeCompare(right.prerelease, 'en');
+    }
+
+    async function fetchLatestReleaseTag() {
+      const latestReleaseUrl = 'https://github.com/evansrrr/BKNetwork/releases/latest';
+      const apiUrl = 'https://api.github.com/repos/evansrrr/BKNetwork/releases/latest';
+
+      try {
+        const response = await fetch(latestReleaseUrl, {
+          cache: 'no-store',
+          redirect: 'follow',
+        });
+        if (response.ok) {
+          const latestUrl = new URL(response.url);
+          const tag = decodeURIComponent(latestUrl.pathname.split('/').pop() || '');
+          if (tag) {
+            return tag;
+          }
+        }
+      } catch {
+        // Fall through to the GitHub API fallback.
+      }
+
+      try {
+        const response = await fetch(apiUrl, {
+          cache: 'no-store',
+          headers: {
+            Accept: 'application/vnd.github+json',
+          },
+        });
+        if (!response.ok) {
+          return '';
+        }
+        const data = await response.json();
+        return typeof data?.tag_name === 'string' ? data.tag_name : '';
+      } catch {
+        return '';
+      }
+    }
+
+    async function checkForNewVersion() {
+      const currentVersion = getCurrentVersionText();
+      if (!currentVersion) {
+        return;
+      }
+
+      const latestVersion = await fetchLatestReleaseTag();
+      if (!latestVersion) {
+        return;
+      }
+
+      const comparison = compareVersions(latestVersion, currentVersion);
+      if (comparison === null || comparison <= 0) {
+        return;
+      }
+
+      showOperationToast('有新版本可用', `版本号：${latestVersion}`, 'warn', 5000);
     }
 
     function scheduleDeferredStartupTasks() {
