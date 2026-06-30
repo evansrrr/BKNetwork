@@ -5,9 +5,7 @@ BKNetwork 是一个轻量级本地后台服务，带有内置 Web 管理界面�
 
 **仅支持 Windows x64** 系统。仅在 Win11 测试，不保证支持 Win10 使用。
 
-[TG Group](https://t.me/ernst_loosen_bot/)
-
-[博客](https://ich.cc.cd/2026/06/22/bknetwork/)
+[tg](https://t.me/ernst_loosen_bot/) [博客](https://ich.cc.cd/2026/06/22/bknetwork/)
 
 [Github：evansrrr/BKNetwork](https://github.com/evansrrr/BKNetwork)
 
@@ -37,40 +35,40 @@ Cloudflare Warp 软件下载页面（1.1.1.1）大陆地区目前无法访问，
 
 任何免流方式都是功能大于体验
 
-**⚠️当前版本（v0.9.7）重大bug：由软件唤起浏览器的操作可能导致cookie全部被清除，强烈建议开启静默启动，并手动在浏览器访问控制台（`http://localhost:13335`）**，该问题将于下个版本修复，在此之前先让我平安度过期末周
+⚠️新版本修复了v0.9.7及之前版本可能丢失浏览器cookie的bug，若还有相似情况可以反馈
 
 ## 常见问题 FAQ（必看！！！）
 
 1. 免流模式真的能实现免流吗？
-   
+
    - 包的老弟。使用 ipv6 不计费，具体原理 [ich.cc.cd](https://ich.cc.cd/)
 
 2. 两个免流模式有什么区别？
-   
+
    - `Warp 免流模式`：网速快，延迟较低，极少情况可能不稳定，steam和wegame可下载。需要安装 Cloudflare WARP 客户端
    - `DNS64 免流模式`：原生 ipv6 直连表现良好，但原本不支持 ipv6 的网站较慢，少数应用无法使用
 
 3. 无法使用Warp免流
-   
+
+   - Warp 确实偶尔连不上，稍后再试
    - 确认 Cloudflare WARP 客户端已安装，且在 PATH 中可访问
    - 更换一个 ipv6 DNS，比如 Cloudflare 或阿里的
-   - **！！！类似 VMware、 Tailscale 和蓝牙的虚拟网卡会干扰 Warp 的 DNS 连接，请禁用这些虚拟网卡！！！**
-   - Warp 确实偶尔连不上，稍后再试
+   - 类似 VMware、 Tailscale 和蓝牙的虚拟网卡会干扰 Warp 的 DNS 连接，请禁用这些虚拟网卡
 
 4. 免流模式不能访问校园网内网（例如校园网登录页和本研一体）
-   
+
    - 免流模式为仅 ipv6，而校园网内网资源仅支持 ipv4，如需访问请先关闭免流
 
 5. 实时流量监控
-   
+
    - 推荐 [Sniffnet](https://sniffnet.net/)
 
 6. 无法初始化
-   
+
    - 一些开发环境如 `vue.js` 可能影响，请自行排除（不折腾就不会有这事）
 
 7. 反馈 Bug & 建议
-   
+
    - 欢迎提 issue。或者先问问你的 ai 朋友（们）
 
 ## 开发者指南
@@ -154,12 +152,13 @@ go test ./...
 ## TODO
 
 - [x] 修复浏览器新实例bug
-- [ ] 新版本检测
+- [x] 新版本检测
 - [ ] 增加DNS64
 - [ ] 优化反馈频率
 - [ ] Warp连接失败反馈
-- [ ] “更多免流”链接
+- [x] “更多免流”链接
 - [ ] 自定义端口
+- [ ] 分离css js
 
 
 ## 免责声明

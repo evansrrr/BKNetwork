@@ -30,6 +30,7 @@ func NewServer(addr string) *Server {
 	mux.HandleFunc("/api/v1/warp", handlers.WarpHandler(hub))
 	mux.HandleFunc("/api/v1/settings", handlers.SettingsHandler(hub))
 	mux.HandleFunc("/api/v1/status", handlers.StatusHandler(hub))
+	mux.HandleFunc("/api/v1/version/latest", handlers.LatestVersionHandler())
 	mux.HandleFunc("/ws", handlers.WSHandler(hub))
 
 	// static files: prefer the executable directory, then the current working directory.

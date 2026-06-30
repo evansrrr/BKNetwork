@@ -1540,7 +1540,7 @@
         <div>
           <div class="eyebrow">BKNetwork</div>
           <h1>北科校园网助手</h1>
-          <p class="lead">v0.9.7</p>
+          <p class="lead">v0.9.8</p>
           <div class="badge ipv6-check-badge" id="ipv6CheckBadge">
             <span id="ipv6CheckDot" class="dot warn"></span>
             <span id="ipv6CheckText" class="ipv6-check-text">正在检测 IPv6 地址...</span>
@@ -1600,7 +1600,7 @@
       <div class="easy-mode-dns64-card">
         <div>
           <div class="easy-mode-title">DNS64 免流模式</div>
-          <div class="easy-mode-desc">开启后自动切换为仅 v6，并把当前网卡的 IPv6 DNS 设为 2a01:4f8:c2c:123f::1；关闭后恢复双栈。</div>
+          <div class="easy-mode-desc">开启后自动切换为仅 v6，并更改 IPv6 DNS；关闭后恢复双栈。</div>
           <div class="easy-mode-state" id="dns64ModeState">当前关闭</div>
         </div>
         <label class="toggle" for="dns64ModeToggle">
@@ -1613,6 +1613,13 @@
         <div>
           <h2>Warp 免流模式需安装 Warp</h2>
           <div class="section-kicker"><a href="https://downloads.cloudflareclient.com/v1/download/windows/ga" target="_blank">在此下载 Warp</a>，可在设置页面关闭Warp的开机自启，不影响功能</div>
+        </div>
+      </div>
+      <div class="section-head">
+        <div>
+          <h2>更多免流模式</h2>
+          <div class="section-kicker"><a href="https://t.me/ernst_loosen_bot" target="_blank">telegram</a> <a href="https://discord.com/invite/vNfM9ezTdE" target="_blank">discord</a>
+          </div>
         </div>
       </div>
     </section>
@@ -2125,37 +2132,15 @@
     }
 
     async function fetchLatestReleaseTag() {
-      const latestReleaseUrl = 'https://github.com/evansrrr/BKNetwork/releases/latest';
-      const apiUrl = 'https://api.github.com/repos/evansrrr/BKNetwork/releases/latest';
-
       try {
-        const response = await fetch(latestReleaseUrl, {
+        const response = await fetch('/api/v1/version/latest', {
           cache: 'no-store',
-          redirect: 'follow',
-        });
-        if (response.ok) {
-          const latestUrl = new URL(response.url);
-          const tag = decodeURIComponent(latestUrl.pathname.split('/').pop() || '');
-          if (tag) {
-            return tag;
-          }
-        }
-      } catch {
-        // Fall through to the GitHub API fallback.
-      }
-
-      try {
-        const response = await fetch(apiUrl, {
-          cache: 'no-store',
-          headers: {
-            Accept: 'application/vnd.github+json',
-          },
         });
         if (!response.ok) {
           return '';
         }
         const data = await response.json();
-        return typeof data?.tag_name === 'string' ? data.tag_name : '';
+        return typeof data?.tag === 'string' ? data.tag : '';
       } catch {
         return '';
       }
