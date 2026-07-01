@@ -21,7 +21,7 @@ BKNetwork 是一个轻量级本地后台服务，带有内置 Web 管理界面�
 
 **免流模式** 包含 `Warp 免流模式` 和 `DNS64 免流模式`，最多同时启用一个。切换通常10s内完成，视网络状态好坏
 
-其中 `Warp 免流模式` 需要安装 Cloudflare Warp，首次运行选择左侧 "Private browsing"，同意使用条款继续，然后可以使用 `Warp 免流模式`
+其中 `Warp 免流模式` 需要安装 Cloudflare Warp，首次运行选择左侧 "Private browsing"，同意使用条款继续，然后可以使用 `Warp 免流模式` （可能需要重启生效）
 
 Cloudflare Warp 软件下载页面（1.1.1.1）大陆地区目前无法访问，可以直接[点此下载Windows最新版本](https://1111-releases.cloudflareclient.com/win/latest)，这是官方下载链接
 
