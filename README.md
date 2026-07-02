@@ -5,7 +5,7 @@ BKNetwork 是一个轻量级本地后台服务，带有内置 Web 管理界面�
 
 **仅支持 Windows x64** 系统。仅在 Win11 测试，不保证支持 Win10 使用。
 
-[tg](https://t.me/ernst_loosen_bot/) [博客](https://ich.cc.cd/2026/06/22/bknetwork/)
+[tg](https://t.me/ernst_loosen_bot/) [博客文章](https://ich.cc.cd/2026/06/22/bknetwork/)
 
 [Github：evansrrr/BKNetwork](https://github.com/evansrrr/BKNetwork)
 
@@ -37,7 +37,7 @@ Cloudflare Warp 软件下载页面（1.1.1.1）大陆地区目前无法访问，
 
 ⚠️新版本修复了v0.9.7及之前版本可能丢失浏览器cookie的bug，若还有相似情况可以反馈
 
-## 常见问题 FAQ（必看！！！）
+## 常见问题 FAQ
 
 1. 免流模式真的能实现免流吗？
 
@@ -155,10 +155,13 @@ go test ./...
 - [x] 新版本检测
 - [ ] 增加DNS64
 - [ ] 优化反馈频率
-- [ ] Warp连接失败反馈
+- [ ] Warp连接失败反馈->更改探测方式
 - [x] “更多免流”链接
 - [ ] 自定义端口
 - [ ] 分离css js
+- [ ] 低饱和度扁平化UI
+- [ ] 自动登录
+- [ ] 纯warp-cli
 
 
 ## 免责声明
