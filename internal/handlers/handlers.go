@@ -78,6 +78,7 @@ type tcpProbeSnapshot struct {
 
 type warpSnapshot struct {
 	Connected bool   `json:"connected"`
+	Status    string `json:"status,omitempty"`
 	CheckedAt string `json:"checkedAt"`
 	Raw       string `json:"raw,omitempty"`
 	Error     string `json:"error,omitempty"`
@@ -439,6 +440,14 @@ func collectNetworkSnapshot() (networkSnapshot, error) {
 	}, nil
 }
 
+func MakeSnapshotEvent() events.Event {
+	snap, err := collectNetworkSnapshot()
+	if err != nil {
+		return events.Event{}
+	}
+	return events.Event{Type: "network.status", Message: "network snapshot", Data: snap}
+}
+
 func hasOnlineAdapter(adapters []adapterSnapshot) bool {
 	for _, adapter := range adapters {
 		if !strings.EqualFold(strings.TrimSpace(adapter.Status), "up") {
@@ -480,7 +489,7 @@ func probeWarpStatus(ctx context.Context) warpSnapshot {
 		result.Error = err.Error()
 		return result
 	}
-	result.Connected = parseWarpConnected(result.Raw)
+	result.Connected, result.Status = parseWarpConnected(result.Raw)
 	return result
 }
 
@@ -513,55 +522,42 @@ func parseWarpSettingsValue(raw, key string) string {
 	return ""
 }
 
-func parseWarpConnected(raw string) bool {
+func parseWarpConnected(raw string) (bool, string) {
 	text := strings.ToLower(strings.TrimSpace(raw))
 	if text == "" {
-		return false
+		return false, ""
 	}
-
-	lines := strings.Split(text, "\n")
+	if strings.Contains(text, "status update: connected") && strings.Contains(text, "network: healthy") {
+		return true, "Connected"
+	}
+	lines := strings.Split(raw, "\n")
 	for _, line := range lines {
 		line = strings.TrimSpace(strings.TrimPrefix(line, "\ufeff"))
 		if !strings.Contains(line, ":") {
 			continue
 		}
-		if value, ok := parseWarpStatusLine(line); ok {
-			return value
+		parts := strings.SplitN(line, ":", 2)
+		if len(parts) != 2 {
+			continue
+		}
+		key := strings.TrimSpace(parts[0])
+		value := strings.TrimSpace(parts[1])
+		if key == "" || value == "" {
+			continue
+		}
+		keyLower := strings.ToLower(key)
+		if strings.Contains(keyLower, "status") || strings.Contains(keyLower, "state") {
+			valueLower := strings.ToLower(value)
+			if strings.Contains(valueLower, "connect") || strings.Contains(valueLower, "check") || strings.Contains(valueLower, "update") || strings.Contains(valueLower, "disabled") || strings.Contains(valueLower, "off") || strings.Contains(valueLower, "disconnect") {
+				return false, value
+			}
+			return false, ""
 		}
 	}
-
-	if strings.Contains(text, "not connected") || strings.Contains(text, "disconnected") || strings.Contains(text, "warp is off") || strings.Contains(text, "status: off") {
-		return false
-	}
-	if strings.Contains(text, "status: connected") || strings.Contains(text, "status update: connected") || strings.Contains(text, "warp is on") || strings.Contains(text, "connected") || strings.Contains(text, "已连接") || strings.Contains(text, "连接中") || strings.Contains(text, "已开启") || strings.Contains(text, "启用") {
-		return true
-	}
-	return false
+	return false, ""
 }
 
-func parseWarpStatusLine(line string) (bool, bool) {
-	parts := strings.SplitN(line, ":", 2)
-	if len(parts) != 2 {
-		return false, false
-	}
 
-	key := strings.TrimSpace(parts[0])
-	value := strings.TrimSpace(parts[1])
-	if key == "" || value == "" {
-		return false, false
-	}
-
-	if strings.Contains(key, "status") || strings.Contains(key, "state") || strings.Contains(key, "connection") || strings.Contains(key, "warp") {
-		switch {
-		case strings.Contains(value, "not connected"), strings.Contains(value, "disconnected"), strings.Contains(value, "off"), strings.Contains(value, "inactive"), strings.Contains(value, "disabled"), strings.Contains(value, "未连接"), strings.Contains(value, "已关闭"), strings.Contains(value, "关闭"):
-			return false, true
-		case strings.Contains(value, "connected"), strings.Contains(value, "on"), strings.Contains(value, "active"), strings.Contains(value, "enabled"), strings.Contains(value, "已连接"), strings.Contains(value, "已开启"), strings.Contains(value, "开启"), strings.Contains(value, "启用"):
-			return true, true
-		}
-	}
-
-	return false, false
-}
 
 func execWithTimeout(ctx context.Context, name string, args ...string) (string, error) {
 	cmd := exec.CommandContext(ctx, name, args...)
@@ -612,38 +608,7 @@ func getIPv6AdminState(ifName string) (bool, error) {
 	return false, errors.New("unable to determine ipv6 admin state")
 }
 
-func getAdapterBindingState(ifName, componentID string) (bool, error) {
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-	defer cancel()
 
-	psCmd := fmt.Sprintf("(Get-NetAdapterBinding -Name '%s' -ComponentID %s -ErrorAction SilentlyContinue).Enabled -eq $true", ifName, componentID)
-	out, err := execWithTimeout(ctx, "powershell", "-NoProfile", "-NonInteractive", "-Command", psCmd)
-	if err != nil && out == "" {
-		return false, err
-	}
-	s := strings.TrimSpace(strings.ToLower(out))
-	switch {
-	case strings.Contains(s, "true") || strings.Contains(s, "1"):
-		return true, nil
-	case strings.Contains(s, "false") || strings.Contains(s, "0"):
-		return false, nil
-	default:
-		return false, errors.New("unable to determine adapter binding state")
-	}
-}
-
-func setAdapterBindingState(ifName, componentID string, enabled bool) (string, error) {
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-	defer cancel()
-
-	var psCmd string
-	if enabled {
-		psCmd = fmt.Sprintf("Enable-NetAdapterBinding -Name '%s' -ComponentID %s -Confirm:$false -ErrorAction Stop", ifName, componentID)
-	} else {
-		psCmd = fmt.Sprintf("Disable-NetAdapterBinding -Name '%s' -ComponentID %s -Confirm:$false -ErrorAction Stop", ifName, componentID)
-	}
-	return execWithTimeout(ctx, "powershell", "-NoProfile", "-NonInteractive", "-Command", psCmd)
-}
 
 func escapePowerShellSingleQuotedString(value string) string {
 	return strings.ReplaceAll(value, "'", "''")
@@ -763,61 +728,43 @@ func applyDnsServers(ifName string, ipv4Servers, ipv6Servers *[]string) (string,
 	return setAdapterDnsServers(ifName, combined)
 }
 
-func applyNetworkMode(ifName, mode string) (string, error) {
-	prevIPv4, _ := getAdapterBindingState(ifName, "ms_tcpip")
-	prevIPv6, _ := getAdapterBindingState(ifName, "ms_tcpip6")
-
-	var ops []struct {
-		componentID string
-		enabled     bool
+func psBool(b bool) string {
+	if b {
+		return "$true"
 	}
+	return "$false"
+}
 
+func applyNetworkMode(ifName, mode string) (string, error) {
+	var wantIPv4, wantIPv6 bool
 	switch mode {
 	case "ipv4":
-		ops = []struct {
-			componentID string
-			enabled     bool
-		}{
-			{componentID: "ms_tcpip", enabled: true},
-			{componentID: "ms_tcpip6", enabled: false},
-		}
+		wantIPv4, wantIPv6 = true, false
 	case "ipv6":
-		ops = []struct {
-			componentID string
-			enabled     bool
-		}{
-			{componentID: "ms_tcpip", enabled: false},
-			{componentID: "ms_tcpip6", enabled: true},
-		}
+		wantIPv4, wantIPv6 = false, true
 	case "both":
-		ops = []struct {
-			componentID string
-			enabled     bool
-		}{
-			{componentID: "ms_tcpip", enabled: true},
-			{componentID: "ms_tcpip6", enabled: true},
-		}
+		wantIPv4, wantIPv6 = true, true
 	default:
 		return "", fmt.Errorf("unknown mode: %s", mode)
 	}
 
-	var outputs []string
-	for _, op := range ops {
-		out, err := setAdapterBindingState(ifName, op.componentID, op.enabled)
-		if err != nil {
-			_, _ = setAdapterBindingState(ifName, "ms_tcpip", prevIPv4)
-			_, _ = setAdapterBindingState(ifName, "ms_tcpip6", prevIPv6)
-			return strings.Join(outputs, "\n"), fmt.Errorf("failed to set %s=%t: %w", op.componentID, op.enabled, err)
-		}
-		if trimmed := strings.TrimSpace(out); trimmed != "" {
-			outputs = append(outputs, trimmed)
-		}
-	}
+	escaped := escapePowerShellSingleQuotedString(ifName)
+	v4, v6 := psBool(wantIPv4), psBool(wantIPv6)
 
-	if mode == "ipv4" {
-		return strings.Join(outputs, "\n"), nil
-	}
-	return strings.Join(outputs, "\n"), nil
+	var script strings.Builder
+	script.WriteString("$ErrorActionPreference='Stop';")
+	script.WriteString(fmt.Sprintf("$b=Get-NetAdapterBinding -Name '%s' -ComponentID ms_tcpip,ms_tcpip6 -ErrorAction SilentlyContinue", escaped))
+	script.WriteString(";$cur=@{};$b|ForEach-Object{$cur[$_.ComponentID]=$_.Enabled}")
+	script.WriteString(fmt.Sprintf(";$r='was:'+($cur['ms_tcpip'])+','+($cur['ms_tcpip6'])"))
+	script.WriteString(fmt.Sprintf(";if($cur['ms_tcpip'] -ne $true -and %s -eq $true){Enable-NetAdapterBinding -Name '%s' -ComponentID ms_tcpip -Confirm:$false;$r+='|en4'}", v4, escaped))
+	script.WriteString(fmt.Sprintf(";if($cur['ms_tcpip'] -eq $true -and %s -eq $false){Disable-NetAdapterBinding -Name '%s' -ComponentID ms_tcpip -Confirm:$false;$r+='|dis4'}", v4, escaped))
+	script.WriteString(fmt.Sprintf(";if($cur['ms_tcpip6'] -ne $true -and %s -eq $true){Enable-NetAdapterBinding -Name '%s' -ComponentID ms_tcpip6 -Confirm:$false;$r+='|en6'}", v6, escaped))
+	script.WriteString(fmt.Sprintf(";if($cur['ms_tcpip6'] -eq $true -and %s -eq $false){Disable-NetAdapterBinding -Name '%s' -ComponentID ms_tcpip6 -Confirm:$false;$r+='|dis6'}", v6, escaped))
+	script.WriteString(";$r")
+
+	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+	defer cancel()
+	return execWithTimeout(ctx, "powershell", "-NoProfile", "-NonInteractive", "-Command", script.String())
 }
 
 func SwitchStackHandler(hub *events.Hub) http.HandlerFunc {
@@ -850,24 +797,18 @@ func SwitchStackHandler(hub *events.Hub) http.HandlerFunc {
 			return
 		}
 
-		prevIPv4, _ := getAdapterBindingState(payload.IfName, "ms_tcpip")
-		prevIPv6, _ := getAdapterBindingState(payload.IfName, "ms_tcpip6")
-
 		out, err := applyNetworkMode(payload.IfName, payload.Mode)
 		if err != nil {
-			rbErr := rollbackNetworkMode(payload.IfName, prevIPv4, prevIPv6)
 			result := map[string]interface{}{
-				"error":          "command failed",
-				"detail":         err.Error(),
-				"output":         out,
-				"rollback_error": fmtError(rbErr),
+				"error":  "command failed",
+				"detail": err.Error(),
+				"output": out,
 			}
 			writeJSON(w, result, http.StatusInternalServerError)
 			notify(hub, "switch.error", "failed to switch network stack", map[string]interface{}{
-				"request":        payload,
-				"detail":         err.Error(),
-				"output":         out,
-				"rollback_error": fmtError(rbErr),
+				"request": payload,
+				"detail":  err.Error(),
+				"output":  out,
 			})
 			return
 		}
@@ -881,22 +822,6 @@ func SwitchStackHandler(hub *events.Hub) http.HandlerFunc {
 	}
 }
 
-func rollbackNetworkMode(ifName string, prevIPv4, prevIPv6 bool) error {
-	if _, err := setAdapterBindingState(ifName, "ms_tcpip", prevIPv4); err != nil {
-		return err
-	}
-	if _, err := setAdapterBindingState(ifName, "ms_tcpip6", prevIPv6); err != nil {
-		return err
-	}
-	return nil
-}
-
-func fmtError(err error) string {
-	if err == nil {
-		return ""
-	}
-	return err.Error()
-}
 
 func WarpHandler(hub *events.Hub) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
@@ -948,12 +873,32 @@ func WarpHandler(hub *events.Hub) http.HandlerFunc {
 			return
 		}
 
-		result := map[string]interface{}{"ok": true, "output": out}
+		warpProbe := probeWarpStatus(ctx)
+
+		result := map[string]interface{}{"ok": true, "output": out, "connected": warpProbe.Connected, "status": warpProbe.Status}
 		writeJSON(w, result, http.StatusOK)
 		notify(hub, "warp.ok", "warp state updated", map[string]interface{}{
-			"request": payload,
-			"output":  strings.TrimSpace(out),
+			"request":   payload,
+			"output":    strings.TrimSpace(out),
+			"connected": warpProbe.Connected,
+			"status":    warpProbe.Status,
 		})
+	}
+}
+
+func WarpStatusHandler() http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodGet {
+			writeJSON(w, map[string]string{"error": "method not allowed"}, http.StatusMethodNotAllowed)
+			return
+		}
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+		probe := probeWarpStatus(ctx)
+		writeJSON(w, map[string]interface{}{
+			"connected": probe.Connected,
+			"status":    probe.Status,
+		}, http.StatusOK)
 	}
 }
 
@@ -1097,31 +1042,15 @@ func WSHandler(hub *events.Hub) http.HandlerFunc {
 		if snap, err := collectNetworkSnapshot(); err == nil {
 			_ = c.WriteJSON(events.Event{Type: "network.status", Message: "network snapshot", Data: snap})
 		}
-		ticker := time.NewTicker(3 * time.Second)
-		defer ticker.Stop()
 
 		for {
-			select {
-			case event, ok := <-sub:
-				if !ok {
-					return
-				}
-				if err := c.WriteJSON(event); err != nil {
-					log.Println("ws write error:", err)
-					return
-				}
-			case <-ticker.C:
-				if snap, err := collectNetworkSnapshot(); err == nil {
-					if err := c.WriteJSON(events.Event{Type: "network.status", Message: "network snapshot", Data: snap}); err != nil {
-						log.Println("ws write error:", err)
-						return
-					}
-				}
-				// keep a lightweight heartbeat for link status
-				if err := c.WriteJSON(events.Event{Type: "heartbeat", Message: "alive"}); err != nil {
-					log.Println("ws write error:", err)
-					return
-				}
+			event, ok := <-sub
+			if !ok {
+				return
+			}
+			if err := c.WriteJSON(event); err != nil {
+				log.Println("ws write error:", err)
+				return
 			}
 		}
 	}

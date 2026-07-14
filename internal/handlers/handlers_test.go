@@ -4,46 +4,63 @@ import "testing"
 
 func TestParseWarpConnected(t *testing.T) {
 	tests := []struct {
-		name string
-		raw  string
-		want bool
+		name       string
+		raw        string
+		want       bool
+		wantStatus string
 	}{
 		{
-			name: "status update connected",
-			raw:  "Status update: Connected\n",
-			want: true,
+			name:       "fully connected",
+			raw:        "Status update: Connected\nNetwork: healthy\n",
+			want:       true,
+			wantStatus: "Connected",
 		},
 		{
-			name: "status not connected",
-			raw:  "Status: Not connected\n",
-			want: false,
+			name:       "connecting",
+			raw:        "Status: Connecting\n",
+			want:       false,
+			wantStatus: "Connecting",
 		},
 		{
-			name: "status line beats other text",
-			raw:  "Status: Connected\nNotes: disconnected tunnel recheck later\n",
-			want: true,
+			name:       "disabled",
+			raw:        "Status: Disabled\n",
+			want:       false,
+			wantStatus: "Disabled",
 		},
 		{
-			name: "warp off",
-			raw:  "Warp is off\n",
-			want: false,
+			name:       "disconnected",
+			raw:        "Status: Disconnected\n",
+			want:       false,
+			wantStatus: "Disconnected",
 		},
 		{
-			name: "chinese connected",
-			raw:  "状态：已连接\n",
-			want: true,
+			name:       "connected but network unhealthy",
+			raw:        "Status update: Connected\nNetwork: down\n",
+			want:       false,
+			wantStatus: "Connected",
 		},
 		{
-			name: "chinese disconnected",
-			raw:  "状态：未连接\n",
-			want: false,
+			name:       "empty input",
+			raw:        "",
+			want:       false,
+			wantStatus: "",
+		},
+		{
+			name:       "checking for update",
+			raw:        "Status: Checking for update\n",
+			want:       false,
+			wantStatus: "Checking for update",
 		},
 	}
 
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			if got := parseWarpConnected(tc.raw); got != tc.want {
-				t.Fatalf("parseWarpConnected() = %v, want %v", got, tc.want)
+			got, gotStatus := parseWarpConnected(tc.raw)
+			if got != tc.want {
+				t.Fatalf("parseWarpConnected() connected = %v, want %v", got, tc.want)
+			}
+			if gotStatus != tc.wantStatus {
+				t.Fatalf("parseWarpConnected() status = %q, want %q", gotStatus, tc.wantStatus)
 			}
 		})
 	}
