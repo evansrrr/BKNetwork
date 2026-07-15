@@ -1894,10 +1894,7 @@
     }
 
     function getStableWarpValue() {
-      if (badgeState.warp.stable !== null) {
-        return badgeState.warp.stable;
-      }
-      return !!latestNetwork?.warp?.connected;
+      return warpConnected;
     }
 
     function getStableEasyModeValue() {
@@ -1975,10 +1972,6 @@
           : latestNetwork.warp,
         adapters: nextAdapters,
       };
-      if (typeof warpConnected === 'boolean') {
-        badgeState.warp.stable = warpConnected;
-        badgeState.warp.pending = null;
-      }
       renderStatus({
         service: { name: 'BKNetwork' },
         lastEvent: { type: 'network.status', message: 'optimistic update' },
@@ -2446,16 +2439,17 @@
     }
 
     function isFreeFlowModeActive(adapter) {
-      if (!adapter) {
-        return false;
-      }
-      if (adapter.freeFlow) {
-        return true;
-      }
       if (dns64ModeState.pending?.enabled) {
         return true;
       }
-      return isDns64ModeActive(adapter);
+      if (isDns64ModeActive(adapter)) {
+        return true;
+      }
+      if (!adapter) {
+        return false;
+      }
+      const ipv6Only = !!adapter.ipv6Enabled && !adapter.ipv4Enabled;
+      return warpConnected && ipv6Only;
     }
 
     async function applyDns64Mode(enabled) {
@@ -2500,6 +2494,7 @@
         if (enabled) {
           checkIpv6Address().catch(() => {});
         }
+        refreshStatus(true).catch(() => {});
         showConfigurationSuccess();
       } catch (err) {
         try {
@@ -2655,30 +2650,51 @@
       }
     }
 
-    function warpStatusText(status, connected) {
-      if (connected) { return '当前：已开启'; }
-      if (!status) { return '当前：已关闭'; }
-      const s = status.toLowerCase();
-      if (s === 'connecting' || s === 'checking for update' || s === 'updating' || s.startsWith('connect') || s.startsWith('check')) {
-        return `正在重连：${status}`;
-      }
-      if (s === 'disabled' || s === 'disconnected' || s.includes('off') || s.includes('disconnect')) {
-        return '当前：已关闭';
-      }
-      return `当前：${status}`;
+    let warpConnected = false;
+    let warpStatusText_ = '';
+    let easyModePendingSuccess = false;
+
+    function updateFreeFlowBadge() {
+      const ifName = currentIfName();
+      const adapter = Array.isArray(latestNetwork?.adapters)
+        ? latestNetwork.adapters.find(a => a && a.name === ifName)
+        : null;
+      setFreeBadge(isFreeFlowModeActive(adapter) ? 'ok' : 'warn');
     }
 
-    function syncWarpState(network, force = false) {
+    function startWarpStatusPoll() {
+      const poll = async () => {
+        try {
+          const res = await fetch('/api/v1/warp-status');
+          const data = await res.json();
+          warpConnected = !!data.connected;
+          warpStatusText_ = data.status || '';
+          if (warpToggleEl) {
+            warpToggleEl.checked = warpConnected;
+            setText(warpStateEl, warpConnected ? '当前：已开启' : warpStatusText_);
+          }
+          syncEasyModeState(latestNetwork);
+          updateFreeFlowBadge();
+          if (warpConnected && easyModePendingSuccess) {
+            easyModePendingSuccess = false;
+            showConfigurationSuccess();
+          }
+        } catch {}
+        setTimeout(poll, 3000);
+      };
+      setTimeout(poll, 1000);
+    }
+
+    function syncWarpState() {
       if (!warpToggleEl || !warpStateEl) {
         return;
       }
-      if (pendingToggleState.warp && !force) {
+      if (pendingToggleState.warp) {
         setText(warpStateEl, pendingToggleState.warp.enabled ? '正在开启...' : '正在关闭...');
         return;
       }
-      const connected = settleBoolState(badgeState.warp, !!network?.warp?.connected, force);
-      warpToggleEl.checked = connected;
-      setText(warpStateEl, warpStatusText(network?.warp?.status, connected));
+      warpToggleEl.checked = warpConnected;
+      setText(warpStateEl, warpConnected ? '当前：已开启' : warpStatusText_);
     }
 
     function fmtSettingValue(value, fallback = '--') {
@@ -2709,7 +2725,7 @@
 
     function syncAdvancedControls(network, force = false) {
       syncStackModeState(network);
-      syncWarpState(network, force);
+      syncWarpState();
     }
 
     function syncEasyModeState(network) {
@@ -2724,9 +2740,11 @@
       const adapter = Array.isArray(network?.adapters)
         ? network.adapters.find(item => item && item.name === ifName)
         : null;
-      const enabled = !!network?.warp?.connected && !!adapter?.ipv6Enabled && !adapter?.ipv4Enabled;
+      const ipv6Only = !!adapter?.ipv6Enabled && !adapter?.ipv4Enabled;
+      const enabled = warpConnected && ipv6Only;
       easyModeToggleEl.checked = enabled;
       setText(easyModeStateEl, enabled ? '当前已开启' : '当前关闭');
+      updateFreeFlowBadge();
     }
 
     function currentIfName() {
@@ -2914,14 +2932,6 @@
       setNetworkBadge(online ? 'ok' : 'warn');
       syncAdvancedControls(network, force);
       syncEasyModeState(network);
-
-      const ifName = currentIfName();
-      if (!network || !Array.isArray(network.adapters)) {
-        setFreeBadge('warn');
-        return;
-      }
-      const adapter = network.adapters.find(a => a && a.name === ifName);
-      setFreeBadge(isFreeFlowModeActive(adapter) ? 'ok' : 'warn');
     }
 
     async function refreshStatus(force = false) {
@@ -3036,23 +3046,6 @@
         await postActionSilently('/api/v1/warp', { action: enabled ? 'start' : 'stop' });
         if (enabled) {
           checkIpv6Address().catch(() => {});
-          let polls = 0;
-          const poll = async () => {
-            try {
-              const res = await fetch('/api/v1/warp-status');
-              const data = await res.json();
-              if (data.connected && data.status === 'Connected') {
-                applyOptimisticNetworkState({ warpConnected: true });
-                warpToggleEl.checked = true;
-                setText(warpStateEl, '当前：已开启');
-                showConfigurationSuccess();
-                return;
-              }
-            } catch {}
-            polls++;
-            setTimeout(poll, polls < 10 ? 1000 : 2000);
-          };
-          setTimeout(poll, 1000);
         }
       } catch (err) {
         clearPendingToggle('warp');
@@ -3078,41 +3071,40 @@
       markPendingToggle('easyMode', enabled, enabled ? 'warp.ok' : 'switch.ok');
       easyModeToggleEl.checked = getStableEasyModeValue();
       setText(easyModeStateEl, enabled ? '正在开启...' : '正在关闭...');
+      if (enabled) {
+        applyOptimisticNetworkState({ adapterMode: 'ipv6' });
+      }
       setBusy(true);
+      let succeeded = false;
       try {
         if (enabled) {
           await postActionSilently('/api/v1/switch', { ifName: currentIfName(), mode: 'ipv6' });
           await postActionSilently('/api/v1/warp', { action: 'start' });
-          let polls = 0;
-          const poll = async () => {
-            try {
-              const res = await fetch('/api/v1/warp-status');
-              const data = await res.json();
-              if (data.connected && data.status === 'Connected') {
-                applyOptimisticNetworkState({ warpConnected: true, adapterMode: 'ipv6' });
-                easyModeToggleEl.checked = true;
-                setText(easyModeStateEl, '当前已开启');
-                showConfigurationSuccess();
-                return;
-              }
-            } catch {}
-            polls++;
-            setTimeout(poll, polls < 10 ? 1000 : 2000);
-          };
-          setTimeout(poll, 1000);
         } else {
-          await postActionSilently('/api/v1/warp', { action: 'stop' });
+          if (pendingToggleState.warp || getStableWarpValue()) {
+            await postActionSilently('/api/v1/warp', { action: 'stop' });
+          }
           await postActionSilently('/api/v1/switch', { ifName: currentIfName(), mode: 'both' });
         }
+        succeeded = true;
       } catch (err) {
         clearPendingToggle('easyMode');
         easyModeToggleEl.checked = getStableEasyModeValue();
         setText(easyModeStateEl, '切换失败');
         appendLog(`免流模式切换失败：${err.message}`);
         showConfigurationFailure(err.message);
-        throw err;
       } finally {
+        if (pendingToggleState.easyMode) {
+          clearPendingToggle('easyMode');
+        }
         setBusy(false);
+        syncEasyModeState(latestNetwork);
+        if (succeeded && !enabled) {
+          showConfigurationSuccess();
+        } else if (succeeded && enabled) {
+          easyModePendingSuccess = true;
+          showConfigurationToast('免流模式', '已开启，等待 WARP 连接...');
+        }
       }
     }
 
@@ -3151,60 +3143,11 @@
             return;
           }
           if (data.type === 'warp.ok') {
-            const warpConnected = !!data.connected;
-            const warpStatus = data.status || '';
-            const isIntermediate = !warpConnected && /^(connecting|checking|updating)/i.test(warpStatus);
             if (pendingToggleState.warp && pendingToggleState.warp.finishOnEvent === 'warp.ok') {
-              const wasEnabling = pendingToggleState.warp.enabled;
               clearPendingToggle('warp');
-              if (warpConnected) {
-                applyOptimisticNetworkState({ warpConnected: true });
-                warpToggleEl.checked = true;
-                setText(warpStateEl, '当前：已开启');
-                showConfigurationSuccess();
-              } else if (wasEnabling && isIntermediate) {
-                warpToggleEl.checked = getStableWarpValue();
-                setText(warpStateEl, `正在重连：${warpStatus}  `);
-              } else {
-                applyOptimisticNetworkState({ warpConnected: false });
-                warpToggleEl.checked = false;
-                setText(warpStateEl, '当前：已关闭');
-                showConfigurationSuccess();
-              }
             }
             if (pendingToggleState.easyMode && pendingToggleState.easyMode.finishOnEvent === 'warp.ok') {
-              const wasEnabling = pendingToggleState.easyMode.enabled;
               clearPendingToggle('easyMode');
-              if (warpConnected) {
-                applyOptimisticNetworkState({ warpConnected: true, adapterMode: 'ipv6' });
-                easyModeToggleEl.checked = true;
-                setText(easyModeStateEl, '当前已开启');
-                showConfigurationSuccess();
-              } else if (wasEnabling && isIntermediate) {
-                easyModeToggleEl.checked = getStableEasyModeValue();
-                setText(easyModeStateEl, `正在重连：${warpStatus}  `);
-              } else {
-                applyOptimisticNetworkState({ warpConnected: false, adapterMode: 'both' });
-                easyModeToggleEl.checked = false;
-                setText(easyModeStateEl, '当前关闭');
-                showConfigurationSuccess();
-              }
-            }
-            if (warpConnected && !pendingToggleState.warp && !pendingToggleState.easyMode) {
-              applyOptimisticNetworkState({ warpConnected: true });
-              warpToggleEl.checked = true;
-              setText(warpStateEl, '当前：已开启');
-              if (easyModeToggleEl) {
-                const ifName = currentIfName();
-                const adapter = Array.isArray(latestNetwork?.adapters)
-                  ? latestNetwork.adapters.find(item => item && item.name === ifName)
-                  : null;
-                if (adapter?.ipv6Enabled && !adapter?.ipv4Enabled) {
-                  easyModeToggleEl.checked = true;
-                  setText(easyModeStateEl, '当前已开启');
-                }
-              }
-              showConfigurationSuccess();
             }
             return;
           }
@@ -3367,6 +3310,7 @@
     showInitializationToast();
 
     refreshStatus(true);
+    startWarpStatusPoll();
     window.addEventListener('load', () => {
       scheduleDeferredStartupTasks();
       checkAdminStatus().catch(() => {});

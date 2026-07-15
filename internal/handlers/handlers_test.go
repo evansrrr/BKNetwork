@@ -40,6 +40,12 @@ func TestParseWarpConnected(t *testing.T) {
 			wantStatus: "Connected",
 		},
 		{
+			name:       "connected but network unstable",
+			raw:        "Status update: Connected\nNetwork: unstable\n",
+			want:       true,
+			wantStatus: "Connected",
+		},
+		{
 			name:       "empty input",
 			raw:        "",
 			want:       false,

@@ -440,14 +440,6 @@ func collectNetworkSnapshot() (networkSnapshot, error) {
 	}, nil
 }
 
-func MakeSnapshotEvent() events.Event {
-	snap, err := collectNetworkSnapshot()
-	if err != nil {
-		return events.Event{}
-	}
-	return events.Event{Type: "network.status", Message: "network snapshot", Data: snap}
-}
-
 func hasOnlineAdapter(adapters []adapterSnapshot) bool {
 	for _, adapter := range adapters {
 		if !strings.EqualFold(strings.TrimSpace(adapter.Status), "up") {
@@ -527,7 +519,7 @@ func parseWarpConnected(raw string) (bool, string) {
 	if text == "" {
 		return false, ""
 	}
-	if strings.Contains(text, "status update: connected") && strings.Contains(text, "network: healthy") {
+	if strings.Contains(text, "status update: connected") && (strings.Contains(text, "network: healthy") || strings.Contains(text, "network: unstable")) {
 		return true, "Connected"
 	}
 	lines := strings.Split(raw, "\n")
