@@ -194,18 +194,13 @@ func decodeJSONList[T any](raw string) ([]T, error) {
 }
 
 func collectNetworkSnapshot() (networkSnapshot, error) {
-	ctx, cancel := context.WithTimeout(context.Background(), 8*time.Second)
-	defer cancel()
+	baseCtx := context.Background()
 
 	var (
 		basicRaw     string
-		basicErr     error
 		bindingRaw   string
-		bindingErr   error
 		ipCfgRaw     string
-		ipCfgErr     error
 		dnsRaw       string
-		dnsErr       error
 		defaultV4    []string
 		defaultV6    []string
 		warpStatus   warpSnapshot
@@ -217,76 +212,83 @@ func collectNetworkSnapshot() (networkSnapshot, error) {
 	wg.Add(9)
 	go func() {
 		defer wg.Done()
+		ctx, cancel := context.WithTimeout(baseCtx, 5*time.Second)
+		defer cancel()
 		basicCmd := "Get-NetAdapter | Select-Object Name, Status, MacAddress, InterfaceDescription | ConvertTo-Json -Compress"
-		basicRaw, basicErr = execWithTimeout(ctx, "powershell", "-NoProfile", "-NonInteractive", "-Command", basicCmd)
+		basicRaw, _ = execWithTimeout(ctx, "powershell", "-NoProfile", "-NonInteractive", "-Command", basicCmd)
 	}()
 	go func() {
 		defer wg.Done()
+		ctx, cancel := context.WithTimeout(baseCtx, 5*time.Second)
+		defer cancel()
 		bindingCmd := "Get-NetAdapterBinding | Where-Object { $_.ComponentID -in @('ms_tcpip','ms_tcpip6') } | Select-Object Name, ComponentID, Enabled | ConvertTo-Json -Compress"
-		bindingRaw, bindingErr = execWithTimeout(ctx, "powershell", "-NoProfile", "-NonInteractive", "-Command", bindingCmd)
+		bindingRaw, _ = execWithTimeout(ctx, "powershell", "-NoProfile", "-NonInteractive", "-Command", bindingCmd)
 	}()
 	go func() {
 		defer wg.Done()
+		ctx, cancel := context.WithTimeout(baseCtx, 5*time.Second)
+		defer cancel()
 		ipCfgCmd := "Get-NetIPConfiguration | Select-Object InterfaceAlias, @{Name='IPv4Gateway';Expression={$_.IPv4DefaultGateway.NextHop}}, @{Name='IPv6Gateway';Expression={$_.IPv6DefaultGateway.NextHop}} | ConvertTo-Json -Compress"
-		ipCfgRaw, ipCfgErr = execWithTimeout(ctx, "powershell", "-NoProfile", "-NonInteractive", "-Command", ipCfgCmd)
+		ipCfgRaw, _ = execWithTimeout(ctx, "powershell", "-NoProfile", "-NonInteractive", "-Command", ipCfgCmd)
 	}()
 	go func() {
 		defer wg.Done()
+		ctx, cancel := context.WithTimeout(baseCtx, 5*time.Second)
+		defer cancel()
 		dnsCmd := "Get-DnsClientServerAddress | Select-Object InterfaceAlias, ServerAddresses | ConvertTo-Json -Compress"
-		dnsRaw, dnsErr = execWithTimeout(ctx, "powershell", "-NoProfile", "-NonInteractive", "-Command", dnsCmd)
+		dnsRaw, _ = execWithTimeout(ctx, "powershell", "-NoProfile", "-NonInteractive", "-Command", dnsCmd)
 	}()
 	go func() {
 		defer wg.Done()
+		ctx, cancel := context.WithTimeout(baseCtx, 5*time.Second)
+		defer cancel()
 		defaultV4, _ = getDefaultRouteAliases(ctx, "IPv4", "0.0.0.0/0")
 	}()
 	go func() {
 		defer wg.Done()
+		ctx, cancel := context.WithTimeout(baseCtx, 5*time.Second)
+		defer cancel()
 		defaultV6, _ = getDefaultRouteAliases(ctx, "IPv6", "::/0")
 	}()
 	go func() {
 		defer wg.Done()
+		ctx, cancel := context.WithTimeout(baseCtx, 8*time.Second)
+		defer cancel()
 		warpStatus = probeWarpStatus(ctx)
 	}()
 	go func() {
 		defer wg.Done()
+		ctx, cancel := context.WithTimeout(baseCtx, 5*time.Second)
+		defer cancel()
 		warpSettings = probeWarpSettings(ctx)
 	}()
 	go func() {
 		defer wg.Done()
+		ctx, cancel := context.WithTimeout(baseCtx, 5*time.Second)
+		defer cancel()
 		tcpProbe = probeCloudflareTCP(ctx)
 	}()
 	wg.Wait()
 
-	if basicErr != nil && strings.TrimSpace(basicRaw) == "" {
-		return networkSnapshot{}, fmt.Errorf("get adapter list failed: %w", basicErr)
-	}
-	basics, err := decodeJSONList[adapterBasic](basicRaw)
-	if err != nil {
-		return networkSnapshot{}, fmt.Errorf("parse adapter list failed: %w", err)
+	basics, basicsErr := decodeJSONList[adapterBasic](basicRaw)
+	bindings, _ := decodeJSONList[adapterBinding](bindingRaw)
+	ipConfigs, _ := decodeJSONList[ipConfigInfo](ipCfgRaw)
+	dnsInfos, _ := decodeJSONList[dnsInfo](dnsRaw)
+
+	if (basicsErr != nil || len(basics) == 0) && basicRaw == "" {
+		retryCtx, retryCancel := context.WithTimeout(baseCtx, 5*time.Second)
+		defer retryCancel()
+		basicRaw, _ = execWithTimeout(retryCtx, "powershell", "-NoProfile", "-NonInteractive", "-Command",
+			"Get-NetAdapter | Select-Object Name, Status, MacAddress, InterfaceDescription | ConvertTo-Json -Compress")
+		basics, basicsErr = decodeJSONList[adapterBasic](basicRaw)
 	}
 
-	if bindingErr != nil && strings.TrimSpace(bindingRaw) == "" {
-		return networkSnapshot{}, fmt.Errorf("get adapter bindings failed: %w", bindingErr)
-	}
-	bindings, err := decodeJSONList[adapterBinding](bindingRaw)
-	if err != nil {
-		return networkSnapshot{}, fmt.Errorf("parse adapter bindings failed: %w", err)
-	}
-
-	if ipCfgErr != nil && strings.TrimSpace(ipCfgRaw) == "" {
-		return networkSnapshot{}, fmt.Errorf("get ip configuration failed: %w", ipCfgErr)
-	}
-	ipConfigs, err := decodeJSONList[ipConfigInfo](ipCfgRaw)
-	if err != nil {
-		return networkSnapshot{}, fmt.Errorf("parse ip configuration failed: %w", err)
-	}
-
-	if dnsErr != nil && strings.TrimSpace(dnsRaw) == "" {
-		return networkSnapshot{}, fmt.Errorf("get dns server list failed: %w", dnsErr)
-	}
-	dnsInfos, err := decodeJSONList[dnsInfo](dnsRaw)
-	if err != nil {
-		return networkSnapshot{}, fmt.Errorf("parse dns server list failed: %w", err)
+	if basicsErr != nil || len(basics) == 0 {
+		return networkSnapshot{
+			CollectedAt: time.Now().Format(time.RFC3339),
+			Warp:        warpStatus,
+			WarpSettings: warpSettings,
+		}, fmt.Errorf("adapter list unavailable: %w", basicsErr)
 	}
 
 	ipv4Map := make(map[string][]string)
@@ -1031,9 +1033,8 @@ func WSHandler(hub *events.Hub) http.HandlerFunc {
 		defer hub.Unsubscribe(sub)
 
 		_ = c.WriteJSON(events.Event{Type: "hello", Message: "connected to BKNetwork"})
-		if snap, err := collectNetworkSnapshot(); err == nil {
-			_ = c.WriteJSON(events.Event{Type: "network.status", Message: "network snapshot", Data: snap})
-		}
+		snap, _ := collectNetworkSnapshot()
+		_ = c.WriteJSON(events.Event{Type: "network.status", Message: "network snapshot", Data: snap})
 
 		for {
 			event, ok := <-sub
@@ -1060,11 +1061,7 @@ func StatusHandler(hub *events.Hub) http.HandlerFunc {
 		if adminErr != nil {
 			adminErrMsg = adminErr.Error()
 		}
-		network, netErr := collectNetworkSnapshot()
-		var netErrMsg string
-		if netErr != nil {
-			netErrMsg = netErr.Error()
-		}
+		network, _ := collectNetworkSnapshot()
 		writeJSON(w, map[string]interface{}{
 			"service": map[string]interface{}{
 				"name":    "BKNetwork",
@@ -1077,7 +1074,6 @@ func StatusHandler(hub *events.Hub) http.HandlerFunc {
 			},
 			"lastEvent":    lastEvent,
 			"network":      network,
-			"networkError": netErrMsg,
 			"time":         time.Now().Format(time.RFC3339),
 		}, http.StatusOK)
 	}

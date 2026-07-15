@@ -3042,8 +3042,10 @@
       warpToggleEl.checked = getStableWarpValue();
       setText(warpStateEl, enabled ? '正在开启...' : '正在关闭...');
       setBusy(true);
+      let succeeded = false;
       try {
         await postActionSilently('/api/v1/warp', { action: enabled ? 'start' : 'stop' });
+        succeeded = true;
         if (enabled) {
           checkIpv6Address().catch(() => {});
         }
@@ -3056,6 +3058,9 @@
         throw err;
       } finally {
         setBusy(false);
+        if (succeeded) {
+          showConfigurationSuccess();
+        }
       }
     }
 
