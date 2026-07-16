@@ -252,6 +252,38 @@ function getAdapterMode(adapter) {
 }
 
 function setAdvancedMode(enabled) {
+  const advancedOnly = document.querySelector('.advanced-only');
+  const easyMode = document.querySelector('.easy-mode');
+  const duration = 200;
+
+  function fadeIn(el) {
+    el.style.display = 'block';
+    el.style.opacity = '0';
+    el.style.transition = 'none';
+    void el.offsetHeight;
+    el.style.transition = `opacity ${duration}ms ease`;
+    el.style.opacity = '1';
+  }
+
+  function fadeOut(el, cb) {
+    el.style.transition = `opacity ${duration}ms ease`;
+    el.style.opacity = '0';
+    setTimeout(() => {
+      el.style.display = 'none';
+      el.style.opacity = '';
+      el.style.transition = '';
+      if (cb) cb();
+    }, duration);
+  }
+
+  if (enabled) {
+    if (easyMode) fadeOut(easyMode);
+    if (advancedOnly) fadeIn(advancedOnly);
+  } else {
+    if (advancedOnly) fadeOut(advancedOnly);
+    if (easyMode) fadeIn(easyMode);
+  }
+
   document.body.classList.toggle('advanced-mode', !!enabled);
   if (advancedModeToggleEl) {
     advancedModeToggleEl.checked = !!enabled;
