@@ -91,6 +91,19 @@ func notify(hub *events.Hub, typ, msg string, data interface{}) {
 	hub.Publish(events.Event{Type: typ, Message: msg, Data: data})
 }
 
+func requireAdmin(w http.ResponseWriter, hub *events.Hub, eventType string, payload interface{}) bool {
+	ok, adminErr := isAdmin()
+	if adminErr != nil {
+		log.Printf("%s: isAdmin check failed: %v", eventType, adminErr)
+	}
+	if !ok {
+		writeJSON(w, map[string]string{"error": "admin required"}, http.StatusForbidden)
+		notify(hub, eventType+".error", "administrator privilege required", payload)
+		return false
+	}
+	return true
+}
+
 func SwitchStackHandler(hub *events.Hub) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodPost {
@@ -108,13 +121,7 @@ func SwitchStackHandler(hub *events.Hub) http.HandlerFunc {
 			return
 		}
 
-		ok, adminErr := isAdmin()
-		if adminErr != nil {
-			log.Printf("switch: isAdmin check failed: %v", adminErr)
-		}
-		if !ok {
-			writeJSON(w, map[string]string{"error": "admin required"}, http.StatusForbidden)
-			notify(hub, "switch.error", "administrator privilege required", payload)
+		if !requireAdmin(w, hub, "switch", payload) {
 			return
 		}
 
@@ -165,13 +172,7 @@ func WarpHandler(hub *events.Hub) http.HandlerFunc {
 			return
 		}
 
-		ok, adminErr := isAdmin()
-		if adminErr != nil {
-			log.Printf("warp: isAdmin check failed: %v", adminErr)
-		}
-		if !ok {
-			writeJSON(w, map[string]string{"error": "admin required"}, http.StatusForbidden)
-			notify(hub, "warp.error", "administrator privilege required", payload)
+		if !requireAdmin(w, hub, "warp", payload) {
 			return
 		}
 
@@ -249,13 +250,7 @@ func DnsHandler(hub *events.Hub) http.HandlerFunc {
 			return
 		}
 
-		ok, adminErr := isAdmin()
-		if adminErr != nil {
-			log.Printf("dns: isAdmin check failed: %v", adminErr)
-		}
-		if !ok {
-			writeJSON(w, map[string]string{"error": "admin required"}, http.StatusForbidden)
-			notify(hub, "dns.error", "administrator privilege required", payload)
+		if !requireAdmin(w, hub, "dns", payload) {
 			return
 		}
 
