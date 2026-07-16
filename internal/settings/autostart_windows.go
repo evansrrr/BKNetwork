@@ -18,7 +18,7 @@ const (
 	startupApprovedRun32  = `Software\Microsoft\Windows\CurrentVersion\Explorer\StartupApproved\Run32`
 	autostartValueName    = "BKNetwork"
 	warpAutoStartName     = "BKNetwork WARP"
-	warpAppExePath        = `C:\Program Files\Cloudflare\Cloudflare WARP\Cloudflare WARP.exe`
+	defaultWarpExePath    = `C:\Program Files\Cloudflare\Cloudflare WARP\Cloudflare WARP.exe`
 )
 
 var officialWarpRunValueNames = []string{"CloudflareWARP", "Cloudflare WARP"}
@@ -50,7 +50,7 @@ func ApplyWarpAppStartupShortcut(enabled bool) error {
 	if !enabled {
 		return removeLegacyStartupShortcut(warpAutoStartName)
 	}
-	return applyStartupShortcut(warpAutoStartName, fmt.Sprintf("%q", warpAppExePath), true)
+	return applyStartupShortcut(warpAutoStartName, fmt.Sprintf("%q", resolveWarpExePath()), true)
 }
 
 func currentExecutablePath() string {
@@ -59,6 +59,32 @@ func currentExecutablePath() string {
 		return ""
 	}
 	return exePath
+}
+
+func resolveWarpExePath() string {
+	_, valueName, hasOfficial := findOfficialWarpRunValue()
+	if hasOfficial {
+		for _, root := range []registry.Key{registry.LOCAL_MACHINE, registry.CURRENT_USER} {
+			key, err := registry.OpenKey(root, autostartRegistryPath, registry.QUERY_VALUE)
+			if err != nil {
+				continue
+			}
+			value, _, getErr := key.GetStringValue(valueName)
+			key.Close()
+			if getErr == nil {
+				value = strings.TrimSpace(value)
+				if strings.HasPrefix(value, "\"") {
+					if idx := strings.Index(value[1:], "\""); idx >= 0 {
+						value = value[1 : idx+1]
+					}
+				}
+				if value != "" {
+					return value
+				}
+			}
+		}
+	}
+	return defaultWarpExePath
 }
 
 func applyStartupShortcut(valueName, command string, enabled bool) error {
@@ -126,7 +152,7 @@ func findOfficialWarpRunValueInRoot(root registry.Key) (string, bool) {
 	if err != nil {
 		return "", false
 	}
-	warpPathLower := strings.ToLower(warpAppExePath)
+	warpPathLower := strings.ToLower(resolveWarpExePath())
 	for _, name := range names {
 		v, _, getErr := key.GetStringValue(name)
 		if getErr != nil {
