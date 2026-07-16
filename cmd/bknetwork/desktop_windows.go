@@ -4,6 +4,7 @@ package main
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log"
 	"net"
@@ -212,7 +213,7 @@ func runDesktopApp() error {
 
 	select {
 	case err := <-serverErr:
-		if err != nil && err.Error() != "http: Server closed" {
+		if err != nil && !errors.Is(err, http.ErrServerClosed) {
 			log.Printf("server exited: %v", err)
 		}
 	default:

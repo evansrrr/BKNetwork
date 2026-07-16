@@ -3,9 +3,11 @@
 package settings
 
 import (
+	"errors"
 	"fmt"
 	"os"
 	"strings"
+	"syscall"
 
 	"golang.org/x/sys/windows/registry"
 )
@@ -93,8 +95,7 @@ func removeLegacyStartupShortcut(valueName string) error {
 }
 
 func isMissingValueError(err error) bool {
-	msg := strings.ToLower(err.Error())
-	return strings.Contains(msg, "cannot find the file specified") || strings.Contains(msg, "the system was unable to find the specified registry key or value")
+	return errors.Is(err, syscall.ERROR_FILE_NOT_FOUND)
 }
 
 func findOfficialWarpRunValue() (registry.Key, string, bool) {
