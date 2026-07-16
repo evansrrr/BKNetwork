@@ -18,10 +18,9 @@ type adapterBasic struct {
 	InterfaceDescription string `json:"InterfaceDescription"`
 }
 
-type adapterBinding struct {
-	Name        string `json:"Name"`
-	ComponentID string `json:"ComponentID"`
-	Enabled     bool   `json:"Enabled"`
+type dnsInfo struct {
+	InterfaceAlias  string `json:"InterfaceAlias"`
+	ServerAddresses any    `json:"ServerAddresses"`
 }
 
 type adapterSnapshot struct {
@@ -72,17 +71,6 @@ type networkSnapshot struct {
 	WarpSettings      warpSettingsSnapshot `json:"warpSettings"`
 }
 
-type ipConfigInfo struct {
-	InterfaceAlias string `json:"InterfaceAlias"`
-	IPv4Gateway    string `json:"IPv4Gateway"`
-	IPv6Gateway    string `json:"IPv6Gateway"`
-}
-
-type dnsInfo struct {
-	InterfaceAlias  string `json:"InterfaceAlias"`
-	ServerAddresses any    `json:"ServerAddresses"`
-}
-
 func normalizeStringSlice(v any) []string {
 	if v == nil {
 		return []string{}
@@ -111,42 +99,26 @@ func normalizeStringSlice(v any) []string {
 	return out
 }
 
-func getDefaultRouteAliases(ctx context.Context, family, prefix string) ([]string, error) {
-	cmd := fmt.Sprintf("(Get-NetRoute -AddressFamily %s -DestinationPrefix '%s' -ErrorAction SilentlyContinue | Sort-Object RouteMetric, InterfaceMetric | Select-Object -ExpandProperty InterfaceAlias -Unique) | ConvertTo-Json -Compress", family, prefix)
-	raw, err := execWithTimeout(ctx, "powershell", "-NoProfile", "-NonInteractive", "-Command", cmd)
-	if err != nil && strings.TrimSpace(raw) == "" {
-		return nil, err
-	}
-	items, err := decodeJSONList[string](raw)
-	if err != nil {
-		return nil, err
-	}
-	aliases := make([]string, 0, len(items))
-	for _, item := range items {
-		if s := strings.TrimSpace(item); s != "" {
-			aliases = append(aliases, s)
-		}
-	}
-	return aliases, nil
-}
-
 func collectNetworkSnapshot() (networkSnapshot, error) {
 	baseCtx := context.Background()
 
 	var (
-		basicRaw     string
-		bindingRaw   string
-		ipCfgRaw     string
-		dnsRaw       string
-		defaultV4    []string
-		defaultV6    []string
-		warpStatus   warpSnapshot
-		warpSettings warpSettingsSnapshot
-		tcpProbe     tcpProbeSnapshot
+		basicRaw        string
+		ipv4Binding     map[string]bool
+		ipv6Binding     map[string]bool
+		ipv4Configs     []netshIPConfig
+		ipv4DefaultRoute string
+		ipv6DefaultRoute string
+		dnsIPv4         []netshDNSEntry
+		dnsIPv6         []netshDNSEntry
+		warpStatus      warpSnapshot
+		warpSettings    warpSettingsSnapshot
+		tcpProbe        tcpProbeSnapshot
 	)
 
 	var wg sync.WaitGroup
-	wg.Add(9)
+	wg.Add(11)
+	// 1. PowerShell: Get-NetAdapter (保留，需要 MAC 和描述信息)
 	go func() {
 		defer wg.Done()
 		ctx, cancel := context.WithTimeout(baseCtx, timeoutShort)
@@ -158,63 +130,97 @@ func collectNetworkSnapshot() (networkSnapshot, error) {
 			log.Printf("snapshot: Get-NetAdapter failed: %v", err)
 		}
 	}()
+	// 2. netsh: IPv4 binding state
 	go func() {
 		defer wg.Done()
 		ctx, cancel := context.WithTimeout(baseCtx, timeoutShort)
 		defer cancel()
-		bindingCmd := "Get-NetAdapterBinding | Where-Object { $_.ComponentID -in @('ms_tcpip','ms_tcpip6') } | Select-Object Name, ComponentID, Enabled | ConvertTo-Json -Compress"
 		var err error
-		bindingRaw, err = execWithTimeout(ctx, "powershell", "-NoProfile", "-NonInteractive", "-Command", bindingCmd)
+		ipv4Binding, err = netshGetIPv4Binding(ctx)
 		if err != nil {
-			log.Printf("snapshot: Get-NetAdapterBinding failed: %v", err)
+			log.Printf("snapshot: netsh IPv4 binding failed: %v", err)
+		}
+	}()
+	// 3. netsh: IPv6 binding state
+	go func() {
+		defer wg.Done()
+		ctx, cancel := context.WithTimeout(baseCtx, timeoutShort)
+		defer cancel()
+		var err error
+		ipv6Binding, err = netshGetIPv6Binding(ctx)
+		if err != nil {
+			log.Printf("snapshot: netsh IPv6 binding failed: %v", err)
+		}
+	}()
+	// 4. netsh: IPv4 config (gateway)
+	go func() {
+		defer wg.Done()
+		ctx, cancel := context.WithTimeout(baseCtx, timeoutShort)
+		defer cancel()
+		var err error
+		ipv4Configs, err = netshGetIPv4Config(ctx)
+		if err != nil {
+			log.Printf("snapshot: netsh IPv4 config failed: %v", err)
+		}
+	}()
+	// 5. netsh: IPv4 default route
+	go func() {
+		defer wg.Done()
+		ctx, cancel := context.WithTimeout(baseCtx, timeoutShort)
+		defer cancel()
+		var err error
+		ipv4DefaultRoute, err = netshGetIPv4DefaultRoute(ctx)
+		if err != nil {
+			log.Printf("snapshot: netsh IPv4 route failed: %v", err)
+		}
+	}()
+	// 6. netsh: IPv6 default route
+	go func() {
+		defer wg.Done()
+		ctx, cancel := context.WithTimeout(baseCtx, timeoutShort)
+		defer cancel()
+		var err error
+		ipv6DefaultRoute, err = netshGetIPv6DefaultRoute(ctx)
+		if err != nil {
+			log.Printf("snapshot: netsh IPv6 route failed: %v", err)
+		}
+	}()
+	// 6. netsh: DNS servers (IPv4 + IPv6)
+	go func() {
+		defer wg.Done()
+		ctx, cancel := context.WithTimeout(baseCtx, timeoutShort)
+		defer cancel()
+		var err error
+		dnsIPv4, err = netshGetDNSServers(ctx, "ipv4")
+		if err != nil {
+			log.Printf("snapshot: netsh IPv4 DNS failed: %v", err)
 		}
 	}()
 	go func() {
 		defer wg.Done()
 		ctx, cancel := context.WithTimeout(baseCtx, timeoutShort)
 		defer cancel()
-		ipCfgCmd := "Get-NetIPConfiguration | Select-Object InterfaceAlias, @{Name='IPv4Gateway';Expression={$_.IPv4DefaultGateway.NextHop}}, @{Name='IPv6Gateway';Expression={$_.IPv6DefaultGateway.NextHop}} | ConvertTo-Json -Compress"
 		var err error
-		ipCfgRaw, err = execWithTimeout(ctx, "powershell", "-NoProfile", "-NonInteractive", "-Command", ipCfgCmd)
+		dnsIPv6, err = netshGetDNSServers(ctx, "ipv6")
 		if err != nil {
-			log.Printf("snapshot: Get-NetIPConfiguration failed: %v", err)
+			log.Printf("snapshot: netsh IPv6 DNS failed: %v", err)
 		}
 	}()
-	go func() {
-		defer wg.Done()
-		ctx, cancel := context.WithTimeout(baseCtx, timeoutShort)
-		defer cancel()
-		dnsCmd := "Get-DnsClientServerAddress | Select-Object InterfaceAlias, ServerAddresses | ConvertTo-Json -Compress"
-		var err error
-		dnsRaw, err = execWithTimeout(ctx, "powershell", "-NoProfile", "-NonInteractive", "-Command", dnsCmd)
-		if err != nil {
-			log.Printf("snapshot: Get-DnsClientServerAddress failed: %v", err)
-		}
-	}()
-	go func() {
-		defer wg.Done()
-		ctx, cancel := context.WithTimeout(baseCtx, timeoutShort)
-		defer cancel()
-		defaultV4, _ = getDefaultRouteAliases(ctx, "IPv4", "0.0.0.0/0")
-	}()
-	go func() {
-		defer wg.Done()
-		ctx, cancel := context.WithTimeout(baseCtx, timeoutShort)
-		defer cancel()
-		defaultV6, _ = getDefaultRouteAliases(ctx, "IPv6", "::/0")
-	}()
+	// 7. warp-cli: status
 	go func() {
 		defer wg.Done()
 		ctx, cancel := context.WithTimeout(baseCtx, timeoutMedium)
 		defer cancel()
 		warpStatus = probeWarpStatus(ctx)
 	}()
+	// 8. warp-cli: settings
 	go func() {
 		defer wg.Done()
 		ctx, cancel := context.WithTimeout(baseCtx, timeoutShort)
 		defer cancel()
 		warpSettings = probeWarpSettings(ctx)
 	}()
+	// 9. TCP probe (native Go, no process)
 	go func() {
 		defer wg.Done()
 		ctx, cancel := context.WithTimeout(baseCtx, timeoutShort)
@@ -224,18 +230,6 @@ func collectNetworkSnapshot() (networkSnapshot, error) {
 	wg.Wait()
 
 	basics, basicsErr := decodeJSONList[adapterBasic](basicRaw)
-	bindings, bindingsErr := decodeJSONList[adapterBinding](bindingRaw)
-	if bindingsErr != nil {
-		log.Printf("snapshot: decode bindings failed: %v", bindingsErr)
-	}
-	ipConfigs, ipCfgErr := decodeJSONList[ipConfigInfo](ipCfgRaw)
-	if ipCfgErr != nil {
-		log.Printf("snapshot: decode ipConfigs failed: %v", ipCfgErr)
-	}
-	dnsInfos, dnsErr := decodeJSONList[dnsInfo](dnsRaw)
-	if dnsErr != nil {
-		log.Printf("snapshot: decode dnsInfos failed: %v", dnsErr)
-	}
 
 	if (basicsErr != nil || len(basics) == 0) && basicRaw == "" {
 		retryCtx, retryCancel := context.WithTimeout(baseCtx, timeoutShort)
@@ -251,12 +245,13 @@ func collectNetworkSnapshot() (networkSnapshot, error) {
 
 	if basicsErr != nil || len(basics) == 0 {
 		return networkSnapshot{
-			CollectedAt: time.Now().Format(time.RFC3339),
-			Warp:        warpStatus,
+			CollectedAt:  time.Now().Format(time.RFC3339),
+			Warp:         warpStatus,
 			WarpSettings: warpSettings,
 		}, fmt.Errorf("adapter list unavailable: %w", basicsErr)
 	}
 
+	// Build lookup maps from netsh results
 	ipv4Map := make(map[string][]string)
 	ipv6Map := make(map[string][]string)
 	ifs, err := net.Interfaces()
@@ -280,39 +275,67 @@ func collectNetworkSnapshot() (networkSnapshot, error) {
 		}
 	}
 
+	// Build binding map from netsh results
 	bindingMap := make(map[string]map[string]bool)
-	for _, b := range bindings {
-		m, ok := bindingMap[b.Name]
-		if !ok {
-			m = map[string]bool{}
-			bindingMap[b.Name] = m
+	for name, enabled := range ipv4Binding {
+		if bindingMap[name] == nil {
+			bindingMap[name] = make(map[string]bool)
 		}
-		m[b.ComponentID] = b.Enabled
+		bindingMap[name]["ms_tcpip"] = enabled
+	}
+	for name, enabled := range ipv6Binding {
+		if bindingMap[name] == nil {
+			bindingMap[name] = make(map[string]bool)
+		}
+		bindingMap[name]["ms_tcpip6"] = enabled
 	}
 
-	ipCfgMap := make(map[string]ipConfigInfo)
-	for _, cfg := range ipConfigs {
-		if strings.TrimSpace(cfg.InterfaceAlias) == "" {
+	// Build IP config map from netsh results
+	ipCfgMap := make(map[string]netshIPConfig)
+	for _, cfg := range ipv4Configs {
+		if strings.TrimSpace(cfg.Name) == "" {
 			continue
 		}
-		ipCfgMap[cfg.InterfaceAlias] = cfg
+		ipCfgMap[cfg.Name] = cfg
+	}
+	// Add IPv6 gateway from route table (ipv6DefaultRoute is the interface name with default route)
+	if ipv6DefaultRoute != "" {
+		if cfg, ok := ipCfgMap[ipv6DefaultRoute]; ok {
+			// IPv6 gateway is the link-local gateway from the route table
+			// We'll leave it empty for now since netsh doesn't easily provide this
+			ipCfgMap[ipv6DefaultRoute] = cfg
+		}
 	}
 
+	// Build DNS map from netsh results
 	dnsMap := make(map[string][]string)
-	for _, info := range dnsInfos {
-		alias := strings.TrimSpace(info.InterfaceAlias)
-		if alias == "" {
-			continue
-		}
-		servers := normalizeStringSlice(info.ServerAddresses)
-		if len(servers) == 0 {
+	for _, entry := range dnsIPv4 {
+		alias := strings.TrimSpace(entry.Name)
+		if alias == "" || len(entry.Servers) == 0 {
 			continue
 		}
 		existing := make(map[string]struct{}, len(dnsMap[alias]))
 		for _, s := range dnsMap[alias] {
 			existing[s] = struct{}{}
 		}
-		for _, s := range servers {
+		for _, s := range entry.Servers {
+			if _, ok := existing[s]; ok {
+				continue
+			}
+			dnsMap[alias] = append(dnsMap[alias], s)
+			existing[s] = struct{}{}
+		}
+	}
+	for _, entry := range dnsIPv6 {
+		alias := strings.TrimSpace(entry.Name)
+		if alias == "" || len(entry.Servers) == 0 {
+			continue
+		}
+		existing := make(map[string]struct{}, len(dnsMap[alias]))
+		for _, s := range dnsMap[alias] {
+			existing[s] = struct{}{}
+		}
+		for _, s := range entry.Servers {
 			if _, ok := existing[s]; ok {
 				continue
 			}
@@ -321,17 +344,25 @@ func collectNetworkSnapshot() (networkSnapshot, error) {
 		}
 	}
 
+	// Determine selected adapters
 	basicNameSet := make(map[string]struct{}, len(basics))
 	for _, b := range basics {
 		basicNameSet[b.Name] = struct{}{}
 	}
 
 	selected := make(map[string]struct{})
-	for _, name := range append(defaultV4, defaultV6...) {
-		if _, ok := basicNameSet[name]; ok {
-			selected[name] = struct{}{}
+	// Select adapters with default routes (already resolved to interface names by netsh)
+	if ipv4DefaultRoute != "" {
+		if _, ok := basicNameSet[ipv4DefaultRoute]; ok {
+			selected[ipv4DefaultRoute] = struct{}{}
 		}
 	}
+	if ipv6DefaultRoute != "" {
+		if _, ok := basicNameSet[ipv6DefaultRoute]; ok {
+			selected[ipv6DefaultRoute] = struct{}{}
+		}
+	}
+	// Select adapters that are UP and have a gateway
 	for _, b := range basics {
 		cfg, ok := ipCfgMap[b.Name]
 		if !ok {

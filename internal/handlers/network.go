@@ -50,33 +50,23 @@ func getIPv6AdminState(ifName string) (bool, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), timeoutShort)
 	defer cancel()
 
-	psCmd := fmt.Sprintf("(Get-NetAdapterBinding -Name '%s' -ComponentID ms_tcpip6 -ErrorAction SilentlyContinue).Enabled -eq $true", ifName)
-	out, err := execWithTimeout(ctx, "powershell", "-NoProfile", "-NonInteractive", "-Command", psCmd)
-	if err == nil {
-		s := strings.TrimSpace(strings.ToLower(out))
-		switch {
-		case strings.Contains(s, "true") || strings.Contains(s, "1"):
-			return true, nil
-		case strings.Contains(s, "false") || strings.Contains(s, "0"):
-			return false, nil
-		}
-	}
-
-	out, err = execWithTimeout(ctx, "netsh", "interface", "ipv6", "show", "interface", ifName)
-	if err != nil && out == "" {
+	raw, err := execWithTimeout(ctx, "netsh", "interface", "ipv6", "show", "interface")
+	if err != nil && raw == "" {
 		return false, err
 	}
-	text := strings.ToLower(out)
-	if strings.Contains(text, "disabled") {
-		return false, nil
-	}
-	if strings.Contains(text, "enabled") {
-		return true, nil
-	}
-	if strings.Contains(text, "admin") && strings.Contains(text, "state") {
-		if strings.Contains(text, "0") {
-			return false, nil
+	// Parse netsh output to find the adapter and its state
+	lines := strings.Split(raw, "\n")
+	for _, line := range lines {
+		fields := strings.Fields(strings.TrimSpace(line))
+		if len(fields) < 5 {
+			continue
 		}
+		name := strings.Join(fields[4:], " ")
+		if !strings.EqualFold(name, ifName) {
+			continue
+		}
+		state := strings.ToLower(fields[3])
+		return state == "connected", nil
 	}
-	return false, errors.New("unable to determine ipv6 admin state")
+	return false, errors.New("adapter not found")
 }

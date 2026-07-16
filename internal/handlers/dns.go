@@ -67,17 +67,38 @@ func splitDnsServersByFamily(values []string) ([]string, []string) {
 }
 
 func getAdapterDnsServers(ifName string) ([]string, error) {
-	ctx, cancel := context.WithTimeout(context.Background(), timeoutMedium)
+	ctx, cancel := context.WithTimeout(context.Background(), timeoutShort)
 	defer cancel()
 
-	psCmd := fmt.Sprintf("Get-DnsClientServerAddress | Where-Object { $_.InterfaceAlias -eq '%s' } | Select-Object InterfaceAlias, ServerAddresses | ConvertTo-Json -Compress", escapePowerShellSingleQuotedString(ifName))
-	raw, err := execWithTimeout(ctx, "powershell", "-NoProfile", "-NonInteractive", "-Command", psCmd)
-	if err != nil && strings.TrimSpace(raw) == "" {
-		return nil, err
+	// Try IPv4 DNS first
+	entries, err := netshGetDNSServers(ctx, "ipv4")
+	if err == nil {
+		for _, entry := range entries {
+			if strings.EqualFold(strings.TrimSpace(entry.Name), ifName) {
+				return entry.Servers, nil
+			}
+		}
 	}
-	dnsInfos, err := decodeJSONList[dnsInfo](raw)
-	if err != nil {
-		return nil, err
+
+	// Try IPv6 DNS
+	entries, err = netshGetDNSServers(ctx, "ipv6")
+	if err == nil {
+		for _, entry := range entries {
+			if strings.EqualFold(strings.TrimSpace(entry.Name), ifName) {
+				return entry.Servers, nil
+			}
+		}
+	}
+
+	// Fallback to PowerShell if netsh fails
+	psCmd := fmt.Sprintf("Get-DnsClientServerAddress | Where-Object { $_.InterfaceAlias -eq '%s' } | Select-Object InterfaceAlias, ServerAddresses | ConvertTo-Json -Compress", escapePowerShellSingleQuotedString(ifName))
+	raw, psErr := execWithTimeout(ctx, "powershell", "-NoProfile", "-NonInteractive", "-Command", psCmd)
+	if psErr != nil && strings.TrimSpace(raw) == "" {
+		return nil, psErr
+	}
+	dnsInfos, decodeErr := decodeJSONList[dnsInfo](raw)
+	if decodeErr != nil {
+		return nil, decodeErr
 	}
 	servers := make([]string, 0)
 	seen := make(map[string]struct{})
