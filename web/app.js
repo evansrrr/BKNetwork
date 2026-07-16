@@ -134,7 +134,7 @@ function startFastStatusRefresh(durationMs = 15000, intervalMs = 2000) {
         stopFastStatusRefresh();
         return;
       }
-      refreshStatus().catch(() => {});
+      refreshStatus().catch(err => console.error('操作失败:', err));
     }, intervalMs);
   }
 
@@ -147,7 +147,7 @@ function startFastStatusRefresh(durationMs = 15000, intervalMs = 2000) {
     }
   }, durationMs);
 
-  refreshStatus().catch(() => {});
+  refreshStatus().catch(err => console.error('操作失败:', err));
 }
 
 function getStableWarpValue() {
@@ -352,7 +352,7 @@ function markInitializationComplete() {
   if (!operationToastState.versionCheckStarted) {
     operationToastState.versionCheckStarted = true;
     window.setTimeout(() => {
-      checkForNewVersion().catch(() => {});
+      checkForNewVersion().catch(err => console.error('操作失败:', err));
     }, 0);
   }
 }
@@ -449,9 +449,9 @@ async function checkForNewVersion() {
 
 function scheduleDeferredStartupTasks() {
   const runDeferred = () => {
-    checkIpv6Address().catch(() => {});
-    loadSettings().catch(() => {});
-    refreshTrafficUsage().catch(() => {});
+    checkIpv6Address().catch(err => console.error('操作失败:', err));
+    loadSettings().catch(err => console.error('操作失败:', err));
+    refreshTrafficUsage().catch(err => console.error('操作失败:', err));
   };
 
   if ('requestIdleCallback' in window) {
@@ -781,9 +781,9 @@ async function applyDns64Mode(enabled) {
     }
     dns64ModeState.backupIpv6Servers = enabled ? backupIpv6Servers : [];
     if (enabled) {
-      checkIpv6Address().catch(() => {});
+      checkIpv6Address().catch(err => console.error('操作失败:', err));
     }
-    refreshStatus(true).catch(() => {});
+    refreshStatus(true).catch(err => console.error('操作失败:', err));
     showConfigurationSuccess();
   } catch (err) {
     try {
@@ -852,7 +852,7 @@ async function saveDnsEditor() {
     dnsEditorState.dirty.ipv6 = false;
     setDnsStatus('DNS 已保存');
     appendLog('DNS 已保存');
-    refreshStatus(true).catch(() => {});
+    refreshStatus(true).catch(err => console.error('操作失败:', err));
   } catch (err) {
     setDnsStatus(`保存失败：${err.message}`);
     appendLog(`DNS 保存失败：${err.message}`);
@@ -1185,7 +1185,7 @@ function refreshTrafficUsage() {
       renderTrafficUsage(payload);
       return payload;
     })
-    .catch(() => {});
+    .catch(err => console.error('操作失败:', err));
 }
 
 function renderNetwork(network) {
@@ -1345,7 +1345,7 @@ async function applyWarpToggle(enabled) {
     await postActionSilently('/api/v1/warp', { action: enabled ? 'start' : 'stop' });
     succeeded = true;
     if (enabled) {
-      checkIpv6Address().catch(() => {});
+      checkIpv6Address().catch(err => console.error('操作失败:', err));
     }
   } catch (err) {
     clearPendingToggle('warp');
@@ -1494,31 +1494,31 @@ if (advancedModeToggleEl) {
 
 if (easyModeToggleEl) {
   easyModeToggleEl.addEventListener('change', () => {
-    applyEasyMode(easyModeToggleEl.checked).catch(() => {});
+    applyEasyMode(easyModeToggleEl.checked).catch(err => console.error('操作失败:', err));
   });
 }
 
 if (dns64ModeToggleEl) {
   dns64ModeToggleEl.addEventListener('change', () => {
-    applyDns64Mode(dns64ModeToggleEl.checked).catch(() => {});
+    applyDns64Mode(dns64ModeToggleEl.checked).catch(err => console.error('操作失败:', err));
   });
 }
 
 if (warpToggleEl) {
   warpToggleEl.addEventListener('change', () => {
-    applyWarpToggle(warpToggleEl.checked).catch(() => {});
+    applyWarpToggle(warpToggleEl.checked).catch(err => console.error('操作失败:', err));
   });
 }
 
 if (settingsOpenBtn) {
   settingsOpenBtn.addEventListener('click', () => {
-    openSettingsPanel().catch(() => {});
+    openSettingsPanel().catch(err => console.error('操作失败:', err));
   });
 }
 
 if (ipv6RefreshBtnEl) {
   ipv6RefreshBtnEl.addEventListener('click', () => {
-    checkIpv6Address().catch(() => {});
+    checkIpv6Address().catch(err => console.error('操作失败:', err));
   });
 }
 
@@ -1530,7 +1530,7 @@ if (dnsIpv4InputEl) {
   dnsIpv4InputEl.addEventListener('keydown', (event) => {
     if (event.key === 'Enter') {
       event.preventDefault();
-      saveDnsEditor().catch(() => {});
+      saveDnsEditor().catch(err => console.error('操作失败:', err));
     }
   });
 }
@@ -1543,7 +1543,7 @@ if (dnsIpv6InputEl) {
   dnsIpv6InputEl.addEventListener('keydown', (event) => {
     if (event.key === 'Enter') {
       event.preventDefault();
-      saveDnsEditor().catch(() => {});
+      saveDnsEditor().catch(err => console.error('操作失败:', err));
     }
   });
 }
@@ -1558,7 +1558,7 @@ if (dnsCardEl) {
       return;
     }
     if (dnsEditorState.dirty.ipv4 || dnsEditorState.dirty.ipv6) {
-      saveDnsEditor().catch(() => {});
+      saveDnsEditor().catch(err => console.error('操作失败:', err));
     }
   });
 }
@@ -1616,7 +1616,7 @@ refreshStatus(true);
 startWarpStatusPoll();
 window.addEventListener('load', () => {
   scheduleDeferredStartupTasks();
-  checkAdminStatus().catch(() => {});
+  checkAdminStatus().catch(err => console.error('操作失败:', err));
 }, { once: true });
 setInterval(refreshTrafficUsage, 60000);
 connectWS();
