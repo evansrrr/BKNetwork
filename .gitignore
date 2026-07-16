@@ -4,3 +4,4 @@ bknetwork.exe~
 /scripts/check_browser_parent.ps1
 mimo.exe
 /.mimocode/
+*.log

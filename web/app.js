@@ -1103,6 +1103,15 @@ function fmtOne(value) {
   return value.trim();
 }
 
+function escapeHTML(str) {
+  if (str == null) return '';
+  return String(str)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;');
+}
+
 function fmtTrafficValue(value) {
   const number = Number(value);
   return Number.isFinite(number) ? number.toFixed(2) : '-';
@@ -1197,20 +1206,20 @@ function renderNetwork(network) {
     card.className = 'adapter-card';
     card.innerHTML = `
       <div class="adapter-head">
-        <div class="adapter-name">${adapter.name ?? '-'}</div>
-        <span class="pill">${adapter.status ?? 'unknown'}</span>
+        <div class="adapter-name">${escapeHTML(adapter.name) || '-'}</div>
+        <span class="pill">${escapeHTML(adapter.status) || 'unknown'}</span>
       </div>
-      <div class="adapter-meta">${adapter.description ?? ''}</div>
-      <div class="adapter-meta">MAC: ${adapter.macAddress ?? '-'}</div>
-      <div class="adapter-meta">IPv4 GW: ${fmtOne(adapter.ipv4Gateway)}</div>
-      <div class="adapter-meta">IPv6 GW: ${fmtOne(adapter.ipv6Gateway)}</div>
-      <div class="ip-block">DNS\n${fmtIPList(adapter.dns)}</div>
+      <div class="adapter-meta">${escapeHTML(adapter.description) || ''}</div>
+      <div class="adapter-meta">MAC: ${escapeHTML(adapter.macAddress) || '-'}</div>
+      <div class="adapter-meta">IPv4 GW: ${escapeHTML(fmtOne(adapter.ipv4Gateway))}</div>
+      <div class="adapter-meta">IPv6 GW: ${escapeHTML(fmtOne(adapter.ipv6Gateway))}</div>
+      <div class="ip-block">DNS\n${escapeHTML(fmtIPList(adapter.dns))}</div>
       <div class="stack-row">
         <span class="stack-pill ${adapter.ipv4Enabled ? 'on' : 'off'}">IPv4 ${adapter.ipv4Enabled ? 'ON' : 'OFF'}</span>
         <span class="stack-pill ${adapter.ipv6Enabled ? 'on' : 'off'}">IPv6 ${adapter.ipv6Enabled ? 'ON' : 'OFF'}</span>
       </div>
-      <div class="ip-block">IPv4\n${fmtIPList(adapter.ipv4)}</div>
-      <div class="ip-block">IPv6\n${fmtIPList(adapter.ipv6)}</div>
+      <div class="ip-block">IPv4\n${escapeHTML(fmtIPList(adapter.ipv4))}</div>
+      <div class="ip-block">IPv6\n${escapeHTML(fmtIPList(adapter.ipv6))}</div>
     `;
     adapterListEl.appendChild(card);
   }
