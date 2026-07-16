@@ -155,10 +155,7 @@ function getStableWarpValue() {
 }
 
 function getStableEasyModeValue() {
-  const ifName = currentIfName();
-  const adapter = Array.isArray(latestNetwork?.adapters)
-    ? latestNetwork.adapters.find(item => item && item.name === ifName)
-    : null;
+  const adapter = getSelectedAdapter(latestNetwork);
   return !!latestNetwork?.warp?.connected && !!adapter?.freeFlow;
 }
 
@@ -918,10 +915,7 @@ async function checkIpv6Address() {
 }
 
 function syncStackModeState(network) {
-  const ifName = currentIfName();
-  const adapter = Array.isArray(network?.adapters)
-    ? network.adapters.find(item => item && item.name === ifName)
-    : null;
+  const adapter = getSelectedAdapter(network);
   const mode = getAdapterMode(adapter);
   const labels = {
     ipv4: '当前：仅 v4',
@@ -945,10 +939,7 @@ let warpStatusText_ = '';
 let easyModePendingSuccess = false;
 
 function updateFreeFlowBadge() {
-  const ifName = currentIfName();
-  const adapter = Array.isArray(latestNetwork?.adapters)
-    ? latestNetwork.adapters.find(a => a && a.name === ifName)
-    : null;
+  const adapter = getSelectedAdapter(latestNetwork);
   setFreeBadge(isFreeFlowModeActive(adapter) ? 'ok' : 'warn');
 }
 
@@ -1028,10 +1019,7 @@ function syncEasyModeState(network) {
     setText(easyModeStateEl, pendingToggleState.easyMode.enabled ? '正在开启...' : '正在关闭...');
     return;
   }
-  const ifName = currentIfName();
-  const adapter = Array.isArray(network?.adapters)
-    ? network.adapters.find(item => item && item.name === ifName)
-    : null;
+  const adapter = getSelectedAdapter(network);
   const ipv6Only = !!adapter?.ipv6Enabled && !adapter?.ipv4Enabled;
   const enabled = warpConnected && ipv6Only;
   easyModeToggleEl.checked = enabled;
