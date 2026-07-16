@@ -781,7 +781,6 @@ async function applyDns64Mode(enabled) {
     if (enabled) {
       checkIpv6Address().catch(err => console.error('操作失败:', err));
     }
-    refreshStatus(true).catch(err => console.error('操作失败:', err));
     showConfigurationSuccess();
   } catch (err) {
     try {
@@ -806,7 +805,12 @@ async function applyDns64Mode(enabled) {
     dns64ModeState.pending = null;
     dns64ModeToggleEl.disabled = false;
     setBusy(false);
-    syncDns64ModeState(latestNetwork, true);
+    // Fetch fresh status after switch operation to get updated adapter state
+    try {
+      await refreshStatus(true);
+    } catch (_) {
+      syncDns64ModeState(latestNetwork, true);
+    }
   }
 }
 
@@ -1392,7 +1396,12 @@ async function applyEasyMode(enabled) {
       clearPendingToggle('easyMode');
     }
     setBusy(false);
-    syncEasyModeState(latestNetwork);
+    // Fetch fresh status after switch operation to get updated adapter state
+    try {
+      await refreshStatus(true);
+    } catch (_) {
+      syncEasyModeState(latestNetwork);
+    }
     if (succeeded && !enabled) {
       showConfigurationSuccess();
     } else if (succeeded && enabled) {

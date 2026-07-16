@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"strings"
+	"time"
 )
 
 func psBool(b bool) string {
@@ -43,7 +44,13 @@ func applyNetworkMode(ifName, mode string) (string, error) {
 
 	ctx, cancel := context.WithTimeout(context.Background(), timeoutShort)
 	defer cancel()
-	return execWithTimeout(ctx, "powershell", "-NoProfile", "-NonInteractive", "-Command", script.String())
+	out, err := execWithTimeout(ctx, "powershell", "-NoProfile", "-NonInteractive", "-Command", script.String())
+	if err != nil {
+		return out, err
+	}
+	// Wait for the OS to update the network adapter state
+	time.Sleep(1 * time.Second)
+	return out, nil
 }
 
 func getIPv6AdminState(ifName string) (bool, error) {

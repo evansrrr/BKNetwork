@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"net"
 	"strings"
+	"time"
 )
 
 func escapePowerShellSingleQuotedString(value string) string {
@@ -119,7 +120,13 @@ func setAdapterDnsServers(ifName string, servers []string) (string, error) {
 	defer cancel()
 
 	psCmd := fmt.Sprintf("Set-DnsClientServerAddress -InterfaceAlias '%s' -ServerAddresses %s -Confirm:$false -ErrorAction Stop", escapePowerShellSingleQuotedString(ifName), joinPowerShellStringArray(servers))
-	return execWithTimeout(ctx, "powershell", "-NoProfile", "-NonInteractive", "-Command", psCmd)
+	out, err := execWithTimeout(ctx, "powershell", "-NoProfile", "-NonInteractive", "-Command", psCmd)
+	if err != nil {
+		return out, err
+	}
+	// Wait for the OS to update the DNS configuration
+	time.Sleep(300 * time.Millisecond)
+	return out, nil
 }
 
 func applyDnsServers(ifName string, ipv4Servers, ipv6Servers *[]string) (string, error) {
