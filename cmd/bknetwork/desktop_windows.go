@@ -186,12 +186,12 @@ func runDesktopApp() error {
 
 	tray := &trayController{
 		iconPath:   trayIcon,
-		browserURL: "http://localhost:13335",
+		browserURL: "http://" + server.DefaultAddr,
 		onExit:     shutdownServer,
 	}
 	if !cfg.SilentStart {
 		tray.onOpen = func() {
-			if waitForLocalServer("127.0.0.1:13335", 10*time.Second) {
+			if waitForLocalServer(server.DefaultAddr, 10*time.Second) {
 				tray.openBrowser()
 				return
 			}

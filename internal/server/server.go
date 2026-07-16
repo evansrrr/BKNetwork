@@ -19,9 +19,11 @@ type Server struct {
 	hub        *events.Hub
 }
 
+const DefaultAddr = "127.0.0.1:13335"
+
 func NewServer(addr string) *Server {
 	if addr == "" {
-		addr = "127.0.0.1:13335"
+		addr = DefaultAddr
 	}
 	mux := http.NewServeMux()
 	hub := events.NewHub()
