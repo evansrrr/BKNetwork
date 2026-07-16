@@ -423,7 +423,8 @@ async function fetchLatestReleaseTag() {
     }
     const data = await response.json();
     return typeof data?.tag === 'string' ? data.tag : '';
-  } catch {
+  } catch (err) {
+    console.error('版本检查失败:', err);
     return '';
   }
 }
@@ -796,8 +797,8 @@ async function applyDns64Mode(enabled) {
         await postActionSilently('/api/v1/switch', { ifName: adapter.name, mode: 'ipv6' });
         await postActionSilently('/api/v1/dns', { ifName: adapter.name, ipv6Servers: [pickDns64Resolver()] });
       }
-    } catch {
-      // best effort rollback
+    } catch (err) {
+      console.error('DNS64 回滚失败:', err);
     }
     dns64ModeToggleEl.checked = isDns64ModeActive(getSelectedAdapter(latestNetwork));
     setDns64ModeStatus(`切换失败：${err.message}`);
@@ -968,7 +969,9 @@ function startWarpStatusPoll() {
         easyModePendingSuccess = false;
         showConfigurationSuccess();
       }
-    } catch {}
+    } catch (err) {
+      console.error('WARP 状态轮询失败:', err);
+    }
     setTimeout(poll, 3000);
   };
   setTimeout(poll, 1000);
@@ -1472,7 +1475,8 @@ function connectWS() {
       }
       setText(lastResultEl, JSON.stringify(data, null, 2));
       appendLog(`${data.type} · ${data.message}`);
-    } catch {
+    } catch (err) {
+      console.error('WebSocket 消息解析失败:', err);
       appendLog(String(event.data));
     }
   });
