@@ -82,12 +82,12 @@ func main() {
 		return
 	}
 
-	error := svc.Run()
-	if error != nil {
+	runErr := svc.Run()
+	if runErr != nil {
 		if logger != nil {
-			logger.Error(error)
+			logger.Error(runErr)
 		} else {
-			log.Fatal(error)
+			log.Fatal(runErr)
 		}
 	}
 }
