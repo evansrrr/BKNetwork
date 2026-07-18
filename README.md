@@ -1,25 +1,26 @@
-BKNetwork
-=========
+<div align="center">
+<img alt="logo" height="100" width="100" src="web/favicon.svg" />
+<h2> BKNetwork </h2>
+<p> 校园网v6免流 </p>
 
-校园网v6一键免流
+[tg](https://t.me/ernst_loosen_bot/) | [实现原理](https://ich.cc.cd/2026/05/11/mianliu/) | [Github](https://github.com/evansrrr/BKNetwork) | [Gitee](https://gitee.com/evansrrr/BKNetwork)
 
-**支持系统**：Win 11 x64
+<br />
 
-[tg](https://t.me/ernst_loosen_bot/)
+[![Stars](https://img.shields.io/github/stars/evansrrr/BKNetwork?style=flat)](https://github.com/evansrrr/BKNetwork/stargazers)
+[![Version](https://img.shields.io/github/v/release/evansrrr/BKNetwork)](https://github.com/evansrrr/BKNetwork/releases)
+[![License](https://img.shields.io/github/license/evansrrr/BKNetwork)](https://github.com/evansrrr/BKNetwork/blob/dev/LICENSE)
+[![Issues](https://img.shields.io/github/issues/evansrrr/BKNetwork)](https://github.com/evansrrr/BKNetwork/issues)
 
-[原理讲解](https://ich.cc.cd/2026/05/11/mianliu/)
-
-[Github：evansrrr/BKNetwork](https://github.com/evansrrr/BKNetwork)
-
-[Gitee：evansrrr/BKNetwork](https://gitee.com/evansrrr/BKNetwork)
+</div>
 
 ![preview.webp](https://imgs.ich.cc.cd/file/public/1784371816472_preview.webp)
 
-## 下载与安装
+## 说明
+
+**仅支持 Win 11 x64**
 
 在 [Releases](https://github.com/evansrrr/BKNetwork/releases/latest) 下载最新带版本号的 `.zip` ，解压后运行 `bknetwork.exe`，首次打开需要点击系统弹窗中 `更多信息` 并确定继续运行。这是因为软件没有微软签名，不必担心。如果遇到提示需要管理员权限，请选择同意。
-
-## 使用说明
 
 运行软件后会在系统托盘中显示图标，单击可打开界面（`http://localhost:13335`），右键点击可 `退出` 。
 
@@ -39,7 +40,7 @@ Cloudflare Warp 软件下载页面（1.1.1.1）大陆地区目前无法访问，
 
 任何免流方式都是功能大于体验
 
-## 常见问题 FAQ
+## FAQ
 
 1. 免流模式真的能实现免流吗？
 
@@ -69,18 +70,14 @@ Cloudflare Warp 软件下载页面（1.1.1.1）大陆地区目前无法访问，
 
    - 欢迎提 issue。或者先问问你的 ai 朋友
 
-## 开发者指南
+## 开发
 
 **构建二进制文件**
-
-在项目根目录执行：
 
 ```bash
 cd BKNetwork
 go build -o bknetwork.exe ./cmd/bknetwork
 ```
-
-当前目录会生成 `bknetwork.exe`
 
 在 Windows 上构建并打包为服务或分发给别的机器时，建议在与目标平台相同的环境中构建（比如使用带有相同 GOOS/GOARCH 的交叉编译或在目标 Windows 主机上构建）
 
@@ -91,11 +88,7 @@ cd BKNetwork
 .\scripts\build-release.ps1
 ```
 
-或右键使用 powershell 运行
-
 `release/` 目录里会包含 `bknetwork.exe` 和最新的 `web/`，程序运行时会自动加载同步后的前端页面
-
-在非 Windows 平台上交叉编译 Windows x64 二进制文件：
 
 ```bash
 # 在 Linux/macOS 环境交叉编译为 Windows amd64
@@ -104,24 +97,13 @@ GOOS=windows GOARCH=amd64 go build -o bknetwork.exe ./cmd/bknetwork
 
 **以服务方式安装（Windows）**
 
-生成 `bknetwork.exe` 后，使用管理员权限运行安装命令：
-
 ```bash
 # 以管理员身份打开 PowerShell
 .\bknetwork.exe install
 .\bknetwork.exe start
 ```
 
-程序使用 `github.com/kardianos/service` 做为服务包装，安装/启动/停止命令均由可执行文件暴露（参见 `cmd/bknetwork` 目录下的实现）
-
-**HTTP / WebSocket 接口**
-
-- 静态 Web UI：根路径（`/`）会提供 `web` 目录下的文件
-- REST 状态接口：`/api/v1/status` — 返回最近一次网络快照与服务状态
-- 控制接口：`/api/v1/switch`（切换 IPv4/IPv6）、`/api/v1/warp`（控制 warp-cli），均为 POST 请求
-- 实时事件：WebSocket 路径为 `/ws`，会发送 `hello`、`network.status`、`heartbeat` 等事件
-
-注：改变网络绑定或控制 `warp-cli` 的命令需要以管理员权限执行，接口会在权限不足或命令不可用时返回错误信息并通过 WebSocket 发布事件
+改变网络绑定或控制 `warp-cli` 的命令需要以管理员权限执行，接口会在权限不足或命令不可用时返回错误信息并通过 WebSocket 发布事件
 
 **常见问题与排查**
 
@@ -129,9 +111,7 @@ GOOS=windows GOARCH=amd64 go build -o bknetwork.exe ./cmd/bknetwork
 - `warp-cli not found`：如果未安装 Cloudflare WARP 客户端，`/api/v1/warp` 会返回错误并在日志中给出提示。安装后确保 `warp-cli` 在 PATH 中可访问
 - 权限不足：修改网卡绑定等操作需要管理员权限，若在非管理员上下文运行会收到 403 或相应错误信息
 
-**开发与测试**
-
-仓库包含部分单元测试，可用以下命令运行测试：
+**单元测试**
 
 ```bash
 cd BKNetwork
@@ -171,12 +151,14 @@ go test ./...
 
 使用本软件即表示你已充分理解并同意本免责声明的全部条款。
 
----
+## 赞赏
 
 感谢支持！请我杯喝的QwQ
 
-![reward.jpg](https://img.ich.cc.cd/file/ichblog/img/reward.jpg)
+<img alt="reward" height="250" width="250" src="https://img.ich.cc.cd/file/ichblog/img/reward.jpg" />
 
-- **Sponsors**：
+<br />
+
+**鸣谢**：
 
   Hikio, Anon
