@@ -1,35 +1,39 @@
 BKNetwork
 =========
 
-BKNetwork 是一个轻量级本地服务，带有内置 Web 管理界面，用于简化用户针对北科校园网络的部分管理，并提供免流功能。
+校园网v6一键免流
 
-**仅支持 Windows x64** 系统。仅在 Win11 测试，不保证支持 Win10 使用。
+**支持系统**：Win 11 x64
 
-[tg](https://t.me/ernst_loosen_bot/) [博客文章](https://ich.cc.cd/2026/06/22/bknetwork/)
+[tg](https://t.me/ernst_loosen_bot/)
+
+[原理讲解](https://ich.cc.cd/2026/05/11/mianliu/)
 
 [Github：evansrrr/BKNetwork](https://github.com/evansrrr/BKNetwork)
 
 [Gitee：evansrrr/BKNetwork](https://gitee.com/evansrrr/BKNetwork)
 
+![preview.webp](https://imgs.ich.cc.cd/file/public/1784371816472_preview.webp)
+
 ## 下载与安装
 
-在右侧栏 [Releases](https://github.com/evansrrr/BKNetwork/releases/latest) 页面下载带版本号的 `.zip` 压缩包，解压后双击运行 `bknetwork.exe`，首次运行需要点击弹窗中 `更多信息` 并确定继续运行。这是因为软件没有微软签名，不必担心。如果遇到提示需要管理员权限，请选择同意。
+在 [Releases](https://github.com/evansrrr/BKNetwork/releases/latest) 下载最新带版本号的 `.zip` ，解压后运行 `bknetwork.exe`，首次打开需要点击系统弹窗中 `更多信息` 并确定继续运行。这是因为软件没有微软签名，不必担心。如果遇到提示需要管理员权限，请选择同意。
 
 ## 使用说明
 
-运行软件后会在系统托盘中显示图标，单击打开网页管理界面（`http://localhost:13335`），右键点击 `退出` 即可退出软件。
+运行软件后会在系统托盘中显示图标，单击可打开界面（`http://localhost:13335`），右键点击可 `退出` 。
 
-**免流模式** 包含 `Warp 免流模式` 和 `DNS64 免流模式`，最多同时启用一个。切换通常10s内完成，视网络状态好坏
+**免流模式** 包含 `Warp` 和 `DNS64` 两种，开一个就行。切换通常10s内完成，视网络状态好坏
 
-其中 `Warp 免流模式` 需要安装 Cloudflare Warp，首次运行选择左侧 "Private browsing"，同意使用条款继续，然后可以使用 `Warp 免流模式`，需要重启生效。首次使用请在高级模式查看目标网卡，确认自动选择的是上网网卡，例如 WiFi/WLAN，而**不是**Warp网卡
+`Warp 免流模式` 需要安装 Cloudflare Warp，首次运行选择左侧 "Private browsing"，同意使用条款继续，重启后可以使用 `Warp 免流模式`。首次使用请在高级模式查看目标网卡，确认自动选择的是上网网卡，例如 WiFi/WLAN，而**不是**Warp网卡
 
 Cloudflare Warp 软件下载页面（1.1.1.1）大陆地区目前无法访问，可以直接[点此下载Windows最新版本](https://1111-releases.cloudflareclient.com/win/latest)，这是官方下载链接
 
-对于北科校园网，`USTB-Student` 和 `USTB-V6` 支持 ipv6 免流，`USTB_Wi-Fi` 不支持。换句话说，免流前提是连接`USTB-Student` 或 `USTB-V6`，已登录校园网账号，并且电脑可以正常获取 ipv6 地址（[testipv6](https://www.testipv6.cn/)）
+对于北科校园网，`USTB-Student` 和 `USTB-V6` 支持免流，`USTB_Wi-Fi` 不支持。换句话说，免流前提是连接 `USTB-Student` 或 `USTB-V6`，校园网账号认证成功，并且电脑可以正常获取 ipv6 地址（[testipv6](https://www.testipv6.cn/)）
 
-**高级模式** 显示更详细的网络状态与控制选项，方便进行单独设置
+**高级模式** 更详细的网络状态与控制选项
 
-**设置** 页面可设置软件开机自启、静默启动、Warp 客户端开机自启等
+**设置** 控制软件开机自启、静默启动、Warp 客户端开机自启
 
 *注：退出软件或开关机时不会自动恢复网络状态，请手动切换。建议在关机前关闭免流模式，否则下次开机后可能因为校园网认证失败无法上网，还得关上免流再登录认证*
 
@@ -76,9 +80,9 @@ cd BKNetwork
 go build -o bknetwork.exe ./cmd/bknetwork
 ```
 
-当前目录会生成 `bknetwork.exe`。
+当前目录会生成 `bknetwork.exe`
 
-在 Windows 上构建并打包为服务或分发给别的机器时，建议在与目标平台相同的环境中构建（比如使用带有相同 GOOS/GOARCH 的交叉编译或在目标 Windows 主机上构建）。
+在 Windows 上构建并打包为服务或分发给别的机器时，建议在与目标平台相同的环境中构建（比如使用带有相同 GOOS/GOARCH 的交叉编译或在目标 Windows 主机上构建）
 
 如果要连同最新前端一起发布，请使用仓库里的发布脚本，它会先同步 `web/` 再构建可分发目录和 zip 压缩包：
 
@@ -87,9 +91,9 @@ cd BKNetwork
 .\scripts\build-release.ps1
 ```
 
-或右键使用 powershell 运行。
+或右键使用 powershell 运行
 
-`release/` 目录里会包含 `bknetwork.exe` 和最新的 `web/`，程序运行时会自动加载同步后的前端页面。
+`release/` 目录里会包含 `bknetwork.exe` 和最新的 `web/`，程序运行时会自动加载同步后的前端页面
 
 在非 Windows 平台上交叉编译 Windows x64 二进制文件：
 
@@ -112,18 +116,18 @@ GOOS=windows GOARCH=amd64 go build -o bknetwork.exe ./cmd/bknetwork
 
 **HTTP / WebSocket 接口**
 
-- 静态 Web UI：根路径（`/`）会提供 `web` 目录下的文件。
-- REST 状态接口：`/api/v1/status` — 返回最近一次网络快照与服务状态。
-- 控制接口：`/api/v1/switch`（切换 IPv4/IPv6）、`/api/v1/warp`（控制 warp-cli），均为 POST 请求。
-- 实时事件：WebSocket 路径为 `/ws`，会发送 `hello`、`network.status`、`heartbeat` 等事件。
+- 静态 Web UI：根路径（`/`）会提供 `web` 目录下的文件
+- REST 状态接口：`/api/v1/status` — 返回最近一次网络快照与服务状态
+- 控制接口：`/api/v1/switch`（切换 IPv4/IPv6）、`/api/v1/warp`（控制 warp-cli），均为 POST 请求
+- 实时事件：WebSocket 路径为 `/ws`，会发送 `hello`、`network.status`、`heartbeat` 等事件
 
-注：改变网络绑定或控制 `warp-cli` 的命令需要以管理员权限执行，接口会在权限不足或命令不可用时返回错误信息并通过 WebSocket 发布事件。
+注：改变网络绑定或控制 `warp-cli` 的命令需要以管理员权限执行，接口会在权限不足或命令不可用时返回错误信息并通过 WebSocket 发布事件
 
 **常见问题与排查**
 
-- 首次打开页面状态加载慢：服务在采集网络快照时会调用若干 PowerShell 和外部命令（如 `warp-cli`），可能耗时。建议在疑难排查时直接在服务器主机上运行 `go run ./cmd/bknetwork` 并观察输出日志。
-- `warp-cli not found`：如果未安装 Cloudflare WARP 客户端，`/api/v1/warp` 会返回错误并在日志中给出提示。安装后确保 `warp-cli` 在 PATH 中可访问。
-- 权限不足：修改网卡绑定等操作需要管理员权限，若在非管理员上下文运行会收到 403 或相应错误信息。
+- 首次打开页面状态加载慢：服务在采集网络快照时会调用若干 PowerShell 和外部命令（如 `warp-cli`），可能耗时。建议在疑难排查时直接在服务器主机上运行 `go run ./cmd/bknetwork` 并观察输出日志
+- `warp-cli not found`：如果未安装 Cloudflare WARP 客户端，`/api/v1/warp` 会返回错误并在日志中给出提示。安装后确保 `warp-cli` 在 PATH 中可访问
+- 权限不足：修改网卡绑定等操作需要管理员权限，若在非管理员上下文运行会收到 403 或相应错误信息
 
 **开发与测试**
 
@@ -133,13 +137,6 @@ GOOS=windows GOARCH=amd64 go build -o bknetwork.exe ./cmd/bknetwork
 cd BKNetwork
 go test ./...
 ```
-
-**目录结构（相关）**
-
-- `cmd/bknetwork` — 程序入口与平台相关的包装代码（服务安装、桌面集成等）
-- `internal/handlers` — HTTP 处理器，包含网络快照采集、warp 控制等逻辑
-- `internal/events` — 事件总线，用于将事件广播到 WebSocket 订阅者
-- `web/` — 前端静态资源
 
 ## TODO
 
@@ -154,7 +151,7 @@ go test ./...
 - [x] 分离css js
 - [x] 低饱和度扁平化UI
 - [x] 应用图标
-- [ ] 退出清除进程
+- [ ] 退出清理进程
 - [ ] 自动登录
 - [ ] 纯warp-cli
 - [ ] 部分warp设置
