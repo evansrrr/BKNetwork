@@ -8,9 +8,9 @@ import (
 	"net/http"
 	"os/exec"
 	"strings"
-	"syscall"
 	"time"
 
+	"bknetwork/internal/buildinfo"
 	"bknetwork/internal/events"
 	appsettings "bknetwork/internal/settings"
 
@@ -28,11 +28,11 @@ var upgrader = websocket.Upgrader{
 }
 
 const (
-	timeoutDial  = 3 * time.Second
-	timeoutShort = 5 * time.Second
+	timeoutDial   = 3 * time.Second
+	timeoutShort  = 5 * time.Second
 	timeoutMedium = 8 * time.Second
-	timeoutApply = 12 * time.Second
-	timeoutLong  = 15 * time.Second
+	timeoutApply  = 12 * time.Second
+	timeoutLong   = 15 * time.Second
 )
 
 type apiResponse struct {
@@ -79,7 +79,7 @@ func decodeJSONList[T any](raw string) ([]T, error) {
 
 func execWithTimeout(ctx context.Context, name string, args ...string) (string, error) {
 	cmd := exec.CommandContext(ctx, name, args...)
-	cmd.SysProcAttr = &syscall.SysProcAttr{HideWindow: true}
+	hideCommandWindow(cmd)
 	out, err := cmd.CombinedOutput()
 	return string(out), err
 }
@@ -176,7 +176,7 @@ func WarpHandler(hub *events.Hub) http.HandlerFunc {
 			return
 		}
 
-		if _, err := exec.LookPath("warp-cli"); err != nil {
+		if _, err := exec.LookPath(warpCLIPath()); err != nil {
 			writeJSON(w, map[string]string{"error": "warp-cli not found; please install Cloudflare WARP client"}, http.StatusBadRequest)
 			notify(hub, "warp.error", "warp-cli not found", nil)
 			return
@@ -384,16 +384,16 @@ func StatusHandler(hub *events.Hub) http.HandlerFunc {
 		writeJSON(w, map[string]interface{}{
 			"service": map[string]interface{}{
 				"name":    "BKNetwork",
-				"version": "dev",
+				"version": buildinfo.Version,
 			},
 			"admin":      admin,
 			"adminError": adminErrMsg,
 			"connection": map[string]interface{}{
 				"websocket": "/ws",
 			},
-			"lastEvent":    lastEvent,
-			"network":      network,
-			"time":         time.Now().Format(time.RFC3339),
+			"lastEvent": lastEvent,
+			"network":   network,
+			"time":      time.Now().Format(time.RFC3339),
 		}, http.StatusOK)
 	}
 }
