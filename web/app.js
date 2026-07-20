@@ -1076,6 +1076,10 @@ function syncTargetAdapterSelects(names) {
 }
 
 function renderStatus(data, force = false) {
+  const version = typeof data?.service?.version === 'string' ? data.service.version.trim() : '';
+  if (version && version !== 'dev') {
+    setText(appVersionEl, `v${version.replace(/^v/, '')}`);
+  }
   syncTargetAdapterSelects(getAdapterOptions(data?.network));
   syncWarpSettingsState(data?.network);
   renderNetwork(data?.network);

@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"runtime"
 	"strings"
 	"time"
 )
@@ -16,6 +17,9 @@ func psBool(b bool) string {
 }
 
 func applyNetworkMode(ifName, mode string) (string, error) {
+	if runtime.GOOS == "darwin" {
+		return applyDarwinNetworkMode(ifName, mode)
+	}
 	var wantIPv4, wantIPv6 bool
 	switch mode {
 	case "ipv4":
@@ -54,6 +58,9 @@ func applyNetworkMode(ifName, mode string) (string, error) {
 }
 
 func getIPv6AdminState(ifName string) (bool, error) {
+	if runtime.GOOS == "darwin" {
+		return getDarwinIPv6State(ifName)
+	}
 	ctx, cancel := context.WithTimeout(context.Background(), timeoutShort)
 	defer cancel()
 

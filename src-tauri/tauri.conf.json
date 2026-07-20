@@ -1,0 +1,21 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "productName": "BKNetwork",
+  "identifier": "com.bknetwork.desktop",
+  "build": {
+    "beforeDevCommand": "go run ./cmd/build-tauri-sidecar",
+    "beforeBuildCommand": "go run ./cmd/build-tauri-sidecar",
+    "frontendDist": "../web"
+  },
+  "app": {
+    "windows": [],
+    "security": {
+      "csp": null
+    }
+  },
+  "bundle": {
+    "active": true,
+    "externalBin": ["binaries/bknetwork-server"],
+    "icon": ["icons/icon.png", "icons/icon.ico", "icons/icon.icns"]
+  }
+}

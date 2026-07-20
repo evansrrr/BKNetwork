@@ -3,7 +3,9 @@ package handlers
 import (
 	"context"
 	"errors"
+	"os"
 	"os/exec"
+	"runtime"
 	"strings"
 	"time"
 )
@@ -12,7 +14,7 @@ var errUnknownWarpAction = errors.New("unknown warp action")
 
 func probeWarpStatus(ctx context.Context) warpSnapshot {
 	result := warpSnapshot{CheckedAt: time.Now().Format(time.RFC3339)}
-	out, err := execWithTimeout(ctx, "warp-cli", "status")
+	out, err := execWithTimeout(ctx, warpCLIPath(), "status")
 	result.Raw = strings.TrimSpace(out)
 	if err != nil && result.Raw == "" {
 		result.Error = err.Error()
@@ -24,7 +26,7 @@ func probeWarpStatus(ctx context.Context) warpSnapshot {
 
 func probeWarpSettings(ctx context.Context) warpSettingsSnapshot {
 	result := warpSettingsSnapshot{CheckedAt: time.Now().Format(time.RFC3339)}
-	out, err := execWithTimeout(ctx, "warp-cli", "settings")
+	out, err := execWithTimeout(ctx, warpCLIPath(), "settings")
 	raw := strings.TrimSpace(out)
 	if err != nil && raw == "" {
 		result.Error = err.Error()
@@ -89,20 +91,33 @@ func parseWarpConnected(raw string) (bool, string) {
 func applyWarpAction(ctx context.Context, action string) (string, error) {
 	switch action {
 	case "start":
-		return execWithTimeout(ctx, "warp-cli", "connect")
+		return execWithTimeout(ctx, warpCLIPath(), "connect")
 	case "stop":
-		return execWithTimeout(ctx, "warp-cli", "disconnect")
+		return execWithTimeout(ctx, warpCLIPath(), "disconnect")
 	default:
 		return "", errUnknownWarpAction
 	}
 }
 
 func StartWarp() error {
-	if _, err := exec.LookPath("warp-cli"); err != nil {
+	if _, err := exec.LookPath(warpCLIPath()); err != nil {
 		return err
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), timeoutShort)
 	defer cancel()
 	_, err := applyWarpAction(ctx, "start")
 	return err
+}
+
+func warpCLIPath() string {
+	if path, err := exec.LookPath("warp-cli"); err == nil {
+		return path
+	}
+	if runtime.GOOS == "darwin" {
+		const appPath = "/Applications/Cloudflare WARP.app/Contents/Resources/warp-cli"
+		if info, err := os.Stat(appPath); err == nil && !info.IsDir() {
+			return appPath
+		}
+	}
+	return "warp-cli"
 }

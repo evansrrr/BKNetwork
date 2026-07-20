@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"net"
+	"runtime"
 	"strings"
 	"time"
 )
@@ -68,6 +69,9 @@ func splitDnsServersByFamily(values []string) ([]string, []string) {
 }
 
 func getAdapterDnsServers(ifName string) ([]string, error) {
+	if runtime.GOOS == "darwin" {
+		return getDarwinAdapterDnsServers(ifName)
+	}
 	ctx, cancel := context.WithTimeout(context.Background(), timeoutShort)
 	defer cancel()
 
@@ -116,6 +120,9 @@ func getAdapterDnsServers(ifName string) ([]string, error) {
 }
 
 func setAdapterDnsServers(ifName string, servers []string) (string, error) {
+	if runtime.GOOS == "darwin" {
+		return setDarwinAdapterDnsServers(ifName, servers)
+	}
 	ctx, cancel := context.WithTimeout(context.Background(), timeoutApply)
 	defer cancel()
 

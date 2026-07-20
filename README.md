@@ -18,15 +18,20 @@
 
 ## 说明
 
-**仅支持 Win 11 x64**
+支持以下桌面平台：
 
-在 [Releases](https://github.com/evansrrr/BKNetwork/releases/latest) 下载最新带版本号的 `.zip` ，解压后运行 `bknetwork.exe`，首次打开需要点击系统弹窗中 `更多信息` 并确定继续运行。这是因为软件没有微软签名，不必担心。如果遇到提示需要管理员权限，请选择同意。
+- Windows 11 x64
+- macOS 11+（Apple Silicon 与 Intel）
 
-运行软件后会在系统托盘中显示图标，单击可打开界面（`http://localhost:13335`），右键点击可 `退出` 。
+在 [Releases](https://github.com/evansrrr/BKNetwork/releases/latest) 下载对应平台的安装包：Windows 使用 `-setup.exe`，macOS 使用对应芯片架构的 `.dmg`。社区构建目前没有受信任的商业签名，Windows 首次打开可能需要在系统提示中选择继续运行；macOS 首次打开可右键应用选择“打开”，或在“系统设置 → 隐私与安全性”中允许打开。
+
+运行软件后会在系统托盘/菜单栏显示图标，单击可打开界面，右键点击可 `退出`。界面由 Tauri 承载，本地 Go sidecar 仅监听 `127.0.0.1:13335`。
 
 **免流模式** 包含 `Warp` 和 `DNS64` 两种，开一个就行。切换通常10s内完成，视网络状态好坏
 
-`Warp 免流模式` 需要安装 Cloudflare Warp，首次运行选择左侧 "Private browsing"，同意使用条款继续，重启后可以使用 `Warp 免流模式`。首次使用请在高级模式查看目标网卡，确认自动选择的是上网网卡，例如 WiFi/WLAN，而**不是**Warp网卡
+`Warp 免流模式` 需要安装 Cloudflare Warp，首次运行选择左侧 "Private browsing"，同意使用条款继续，重启后可以使用 `Warp 免流模式`。首次使用请在高级模式查看目标网卡，确认自动选择的是上网网卡，例如 WiFi/WLAN，而**不是**Warp网卡。
+
+Windows 的网络变更由已提权进程执行；macOS 在实际修改 IPv4/IPv6 或 DNS 时会显示系统管理员授权弹窗。
 
 Cloudflare Warp 软件下载页面（1.1.1.1）大陆地区目前无法访问，可以直接[点此下载Windows最新版本](https://1111-releases.cloudflareclient.com/win/latest)，这是官方下载链接
 
@@ -72,14 +77,38 @@ Cloudflare Warp 软件下载页面（1.1.1.1）大陆地区目前无法访问，
 
 ## 开发
 
-**构建二进制文件**
+**开发 Tauri 桌面端**
+
+需要 Go 1.25+、Rust stable 和平台对应的 Tauri 系统依赖。Windows 还需要 Visual Studio C++ Build Tools；macOS 需要 Xcode Command Line Tools。
+
+```bash
+# 安装 Tauri CLI（只需一次）
+cargo install tauri-cli --version "^2.0.0" --locked
+
+# 开发运行；构建钩子会自动生成当前架构的 Go sidecar
+cargo tauri dev
+
+# 生成当前平台安装包
+cargo tauri build
+```
+
+应用版本只需修改 `src-tauri/Cargo.toml` 的 `package.version`；Tauri 配置和 Go sidecar 都会读取这个版本。
+
+提交前建议启用仓库的 pre-commit hook，暂存的 Go 文件会自动运行 `gofmt`：
+
+```bash
+pipx install pre-commit
+pre-commit install
+```
+
+**仅构建旧版 Go 入口**
 
 ```bash
 cd BKNetwork
 go build -o bknetwork.exe ./cmd/bknetwork
 ```
 
-在 Windows 上构建并打包为服务或分发给别的机器时，建议在与目标平台相同的环境中构建（比如使用带有相同 GOOS/GOARCH 的交叉编译或在目标 Windows 主机上构建）
+旧版入口仍保留给服务模式和排障。常规桌面分发请使用上面的 Tauri 构建。
 
 如果要连同最新前端一起发布，请使用仓库里的发布脚本，它会先同步 `web/` 再构建可分发目录和 zip 压缩包：
 
@@ -117,6 +146,19 @@ GOOS=windows GOARCH=amd64 go build -o bknetwork.exe ./cmd/bknetwork
 cd BKNetwork
 go test ./...
 ```
+
+**GitHub CI/CD**
+
+- `.github/workflows/ci.yml`：在 push/PR 上校验 Go 格式、运行 Go 测试、Vet、Rustfmt 和 Clippy，并校验 Windows x64 与 macOS Apple Silicon sidecar。
+- `.github/workflows/release.yml`：推送与 Cargo 版本一致的 `vX.Y.Z` 标签后，自动创建 GitHub Release，发布 Windows x64 NSIS、macOS Apple Silicon DMG 和 macOS Intel DMG。
+
+```bash
+# 例：src-tauri/Cargo.toml 已更新为 1.1.0
+git tag v1.1.0
+git push origin v1.1.0
+```
+
+如需消除 Windows SmartScreen 和 macOS Gatekeeper 提示，需要后续在仓库 Secrets 中接入对应平台的代码签名证书；当前流程会明确产出未受信任证书签名的社区构建。
 
 ## TODO
 

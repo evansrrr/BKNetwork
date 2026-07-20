@@ -10,6 +10,8 @@ import (
 	"path"
 	"strconv"
 	"strings"
+
+	"bknetwork/internal/buildinfo"
 )
 
 type semanticVersion struct {
@@ -114,7 +116,7 @@ func fetchLatestReleaseTag(ctx context.Context) (string, error) {
 }
 
 func fetchLatestReleaseTagFromRedirect(ctx context.Context) (string, error) {
-	const latestReleaseURL = "https://github.com/evansrrr/BKNetwork/releases/latest"
+	latestReleaseURL := fmt.Sprintf("https://github.com/%s/releases/latest", buildinfo.Repository)
 
 	client := &http.Client{Timeout: timeoutMedium}
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, latestReleaseURL, nil)
@@ -142,7 +144,7 @@ func fetchLatestReleaseTagFromRedirect(ctx context.Context) (string, error) {
 }
 
 func fetchLatestReleaseTagFromAPI(ctx context.Context) (string, error) {
-	const releasesAPI = "https://api.github.com/repos/evansrrr/BKNetwork/releases?per_page=100"
+	releasesAPI := fmt.Sprintf("https://api.github.com/repos/%s/releases?per_page=100", buildinfo.Repository)
 
 	client := &http.Client{Timeout: timeoutMedium}
 	apiReq, err := http.NewRequestWithContext(ctx, http.MethodGet, releasesAPI, nil)

@@ -54,6 +54,9 @@ func ApplyWarpAppStartupShortcut(enabled bool) error {
 }
 
 func currentExecutablePath() string {
+	if appPath := strings.TrimSpace(os.Getenv("BKNETWORK_APP_EXECUTABLE")); appPath != "" {
+		return appPath
+	}
 	exePath, err := os.Executable()
 	if err != nil || strings.TrimSpace(exePath) == "" {
 		return ""
