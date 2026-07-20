@@ -1,0 +1,291 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>BKNetwork</title>
+  <link rel="icon" type="image/svg+xml" href="favicon.svg" />
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <div class="mode-switch" aria-label="高级模式切换">
+    <span class="label">高级模式</span>
+    <label class="toggle" title="切换高级模式">
+      <input id="advancedModeToggle" type="checkbox" />
+      <span class="toggle-track" aria-hidden="true"></span>
+    </label>
+  </div>
+
+  <a class="github-fab" href="https://github.com/evansrrr/BKNetwork" target="_blank" rel="noreferrer" aria-label="访问 GitHub 主页">
+    <picture>
+      <source srcset="github-dark.svg" media="(prefers-color-scheme: dark)" />
+      <img src="github-light.svg" alt="GitHub" />
+    </picture>
+  </a>
+
+  <button class="settings-fab" id="settingsOpenBtn" type="button" aria-label="打开设置面板" title="设置">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+      <circle cx="12" cy="12" r="3"/>
+      <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/>
+    </svg>
+  </button>
+
+  <div class="operation-toast visible" id="operationToast" role="status" aria-live="polite" aria-atomic="true" data-tone="info">
+    <div class="operation-toast__title" id="operationToastTitle">正在初始化...</div>
+    <div class="operation-toast__desc" id="operationToastDesc">正在连接 WebSocket 并同步页面状态</div>
+  </div>
+
+  <div class="settings-overlay" id="settingsOverlay" aria-hidden="true">
+    <div class="settings-panel" role="dialog" aria-modal="true" aria-labelledby="settingsTitle">
+      <header>
+        <div>
+          <h3 id="settingsTitle">设置</h3>
+          <div class="settings-desc"><!-- 描述 --></div>
+        </div>
+        <button class="close-btn" id="settingsCloseBtn" type="button" aria-label="关闭设置">×</button>
+      </header>
+      <div class="settings-body">
+        <div class="setting-row">
+          <div class="setting-copy">
+            <div class="setting-title">BKNetwork 开机自启</div>
+            <div class="setting-note">登录 Windows 后自动启动 BKNetwork</div>
+          </div>
+          <span class="toggle">
+            <input id="settingAutoStart" type="checkbox" />
+            <span class="toggle-track" aria-hidden="true"></span>
+          </span>
+        </div>
+        <div class="setting-row">
+          <div class="setting-copy">
+            <div class="setting-title">静默启动</div>
+            <div class="setting-note">启动时不弹出网页，只保留托盘</div>
+          </div>
+          <span class="toggle">
+            <input id="settingSilentStart" type="checkbox" />
+            <span class="toggle-track" aria-hidden="true"></span>
+          </span>
+        </div>
+        <div class="setting-row">
+          <div class="setting-copy">
+            <div class="setting-title">WARP 客户端开机自启</div>
+            <div class="setting-note">登录 Windows 后自动启动 WARP 客户端，不自动连接</div>
+          </div>
+          <span class="toggle">
+            <input id="settingWarpAppAutoStart" type="checkbox" />
+            <span class="toggle-track" aria-hidden="true"></span>
+          </span>
+        </div>
+        <div class="settings-status" id="settingsStatus">未加载</div>
+      </div>
+    </div>
+  </div>
+
+  <main class="shell">
+    <section class="hero">
+      <div class="panel hero-main">
+        <div>
+          <div class="eyebrow">BKNetwork</div>
+          <h1>北科校园网助手</h1>
+          <p class="lead">v1.0.0</p>
+          <div class="badge ipv6-check-badge" id="ipv6CheckBadge">
+            <span id="ipv6CheckDot" class="dot warn"></span>
+            <span id="ipv6CheckText" class="ipv6-check-text">正在检测 IPv6 地址...</span>
+            <button id="ipv6RefreshBtn" class="ipv6-refresh" type="button" aria-label="刷新 IPv6 检测" title="刷新 IPv6 检测">
+              <svg viewBox="0 0 24 24" aria-hidden="true">
+                <path d="M17.65 6.35A7.95 7.95 0 0 0 12 4c-4.42 0-8 3.58-8 8s3.58 8 8 8c3.31 0 6.14-2.01 7.36-4.88a1 1 0 1 0-1.84-.8A6 6 0 1 1 12 6c1.38 0 2.63.47 3.63 1.24L14 9h6V3l-2.35 3.35Z"/>
+              </svg>
+            </button>
+          </div>
+        </div>
+        <div class="status-row">
+          <div class="badge"><span id="backendDot" class="dot warn"></span><span id="backendBadge">后端状态</span></div>
+          <div class="badge"><span id="adminDot" class="dot warn"></span><span id="adminBadge">管理员权限检查中</span></div>
+          <div class="badge"><span id="networkDot" class="dot"></span><span id="networkBadge">网络状态</span></div>
+          <div class="badge"><span id="freeDot" class="dot"></span><span id="freeBadge">免流状态</span></div>
+        </div>
+      </div>
+
+      <aside class="panel hero-side">
+        <a class="mini mini-link" href="http://202.204.48.66" target="_blank" rel="noreferrer">
+          <div class="label">点击跳转</div>
+          <div class="value">登录校园网</div>
+        </a>
+        <a class="mini mini-link" href="https://zifuwu.ustb.edu.cn/" target="_blank" rel="noreferrer">
+          <div class="label">点击跳转</div>
+          <div class="value">校园网管理系统</div>
+        </a>
+        <div class="mini">
+          <div class="label">本月流量统计</div>
+          <div class="value" id="trafficUsage">未加载</div>
+        </div>
+        <div class="mini">
+          <div class="label">状态更新时间</div>
+          <div class="value" id="lastUpdated">未加载</div>
+        </div>
+      </aside>
+    </section>
+
+    <section class="panel section easy-mode" id="easyModeSection">
+      <div class="section-head">
+        <div>
+          <h2>校园网免流</h2>
+          <br/>
+        </div>
+      </div>
+      <label class="easy-mode-card" for="easyModeToggle">
+        <div>
+          <div class="easy-mode-title">Warp 免流模式</div>
+          <div class="easy-mode-desc">开启后切换为仅 v6，并启用 Warp；关闭则恢复双栈并关闭 Warp</div>
+          <div class="easy-mode-state" id="easyModeState">当前关闭</div>
+        </div>
+        <span class="toggle">
+          <input id="easyModeToggle" type="checkbox" />
+          <span class="toggle-track" aria-hidden="true"></span>
+        </span>
+      </label>
+      <div class="easy-mode-dns64-card">
+        <div>
+          <div class="easy-mode-title">DNS64 免流模式</div>
+          <div class="easy-mode-desc">开启后自动切换为仅 v6，并更改 IPv6 DNS；关闭后恢复双栈。</div>
+          <div class="easy-mode-state" id="dns64ModeState">当前关闭</div>
+        </div>
+        <label class="toggle" for="dns64ModeToggle">
+          <input id="dns64ModeToggle" type="checkbox" />
+          <span class="toggle-track" aria-hidden="true"></span>
+        </label>
+      </div>
+      <br/><br/>
+      <div class="section-head">
+        <div>
+          <h2>Warp 免流模式需安装 Warp</h2>
+          <div class="section-kicker"><a href="https://downloads.cloudflareclient.com/v1/download/windows/ga" target="_blank">在此下载 Warp</a>，可在设置页面关闭Warp的开机自启，不影响功能</div>
+        </div>
+      </div>
+      <div class="section-head">
+        <div>
+          <h2>更多免流模式</h2>
+          <div class="section-kicker"><a href="https://t.me/ernst_loosen_bot" target="_blank">telegram</a> <a href="https://discord.com/invite/vNfM9ezTdE" target="_blank">discord</a>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <div class="advanced-only">
+      <section class="grid">
+        <div class="panel section">
+          <div class="section-head">
+            <div>
+              <h2>网络控制</h2>
+              <div class="section-kicker"><!-- 描述 --></div>
+            </div>
+          </div>
+          <div class="control-grid">
+            <div class="control-card">
+              <div class="control-label">目标网卡</div>
+              <div class="control-value">
+                <select id="ifName2" class="target-adapter-select">
+                  <option value="WiFi">WiFi</option>
+                </select>
+              </div>
+            </div>
+            <div class="control-card">
+              <div class="control-label">切换 ip 栈协议</div>
+              <div class="mode-select" role="radiogroup" aria-label="网络模式选择">
+                <button id="btnIpv4" class="mode-option" type="button" onclick="switchStack('ipv4').catch(() => {})" aria-pressed="false">
+                  <span class="mode-dot" aria-hidden="true"></span>
+                  <span>仅 v4</span>
+                </button>
+                <button id="btnIpv6" class="mode-option" type="button" onclick="switchStack('ipv6').catch(() => {})" aria-pressed="false">
+                  <span class="mode-dot" aria-hidden="true"></span>
+                  <span>仅 v6</span>
+                </button>
+                <button id="btnBoth" class="mode-option" type="button" onclick="switchStack('both').catch(() => {})" aria-pressed="false">
+                  <span class="mode-dot" aria-hidden="true"></span>
+                  <span>双栈</span>
+                </button>
+              </div>
+              <div class="mode-state" id="stackModeState">当前：未加载</div>
+            </div>
+            <div class="control-card dns-card" id="dnsCard">
+              <div class="control-label">更改 DNS</div>
+              <div class="dns-grid">
+                <label class="dns-field" for="dnsIpv4Input">
+                  <span>IPv4 DNS</span>
+                  <input id="dnsIpv4Input" class="dns-input" type="text" autocomplete="off" spellcheck="false" placeholder="例如 1.1.1.1" />
+                </label>
+                <label class="dns-field" for="dnsIpv6Input">
+                  <span>IPv6 DNS</span>
+                  <input id="dnsIpv6Input" class="dns-input" type="text" autocomplete="off" spellcheck="false" placeholder="例如 2400:3200::1" />
+                </label>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="panel section">
+          <div class="section-head">
+            <div>
+              <h2>Cloudflare WARP</h2>
+              <div class="section-kicker"><!-- 描述 --></div>
+            </div>
+          </div>
+          <label class="warp-toggle-card" for="warpToggle">
+            <div class="warp-copy">
+              <div class="warp-title">WARP 开关</div>
+              <div class="warp-desc">状态更新可能有延迟</div>
+              <div class="warp-state" id="warpState">当前：未加载</div>
+            </div>
+            <span class="toggle">
+              <input id="warpToggle" type="checkbox" />
+              <span class="toggle-track" aria-hidden="true"></span>
+            </span>
+          </label>
+          <div class="warp-settings-card" aria-live="polite">
+            <div class="warp-settings-head">
+              <div class="warp-title">WARP 配置</div>
+              <div class="warp-settings-state" id="warpSettingsState">正在加载</div>
+            </div>
+            <div class="warp-settings-grid">
+              <div class="warp-setting-item">
+                <span>Mode</span>
+                <strong id="warpSettingsMode">--</strong>
+              </div>
+              <div class="warp-setting-item">
+                <span>WARP tunnel protocol</span>
+                <strong id="warpSettingsTunnelProtocol">--</strong>
+              </div>
+            </div>
+          </div>
+
+        </div>
+      </section>
+
+      <section class="section" style="margin-top:16px;">
+        <div class="section-head">
+          <div>
+            <h2>网卡</h2>
+            <div class="section-kicker"><!-- 描述 --></div>
+          </div>
+        </div>
+        <div class="adapter-list" id="adapterList"></div>
+      </section>
+
+      <section class="section" style="margin-top:12px;">
+        <div class="section-head">
+          <div>
+            <h2>日志</h2>
+            <div class="section-kicker"><!-- 描述 --></div>
+          </div>
+        </div>
+        <div class="log-box" id="log"></div>
+      </section>
+    </div>
+  </main>
+
+    <footer class="site-footer" aria-label="页脚">
+      <small>Made with <span aria-hidden="true">❤️</span> by <a href="https://ich.cc.cd/" target="_blank" rel="noreferrer">Raziore</a></small>
+    </footer>
+
+  <script src="app.js"></script>
+</body>
+</html>

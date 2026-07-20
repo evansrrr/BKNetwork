@@ -1,0 +1,11 @@
+bknetwork.exe
+bknetwork.exe~
+/releases/
+/scripts/check_browser_parent.ps1
+mimo.exe
+/.mimocode/
+*.log
+/src-tauri/binaries/bknetwork-server-*
+/src-tauri/gen/
+/src-tauri/.target/
+/src-tauri/target/
