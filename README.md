@@ -7,12 +7,17 @@
 
 <br />
 
-[![Stars](https://img.shields.io/github/stars/evansrrr/BKNetwork?style=flat)](https://github.com/evansrrr/BKNetwork/stargazers)
-[![Version](https://img.shields.io/github/v/release/evansrrr/BKNetwork)](https://github.com/evansrrr/BKNetwork/releases)
-[![License](https://img.shields.io/github/license/evansrrr/BKNetwork)](https://github.com/evansrrr/BKNetwork/blob/dev/LICENSE)
-[![Issues](https://img.shields.io/github/issues/evansrrr/BKNetwork)](https://github.com/evansrrr/BKNetwork/issues)
-
+<a href="https://github.com/evansrrr/BKNetwork/stargazers">
+<img alt="Stargazers" src="https://img.shields.io/github/stars/evansrrr/BKNetwork?style=for-the-badge&logo=github&color=f4dbd6&logoColor=D9E0EE&labelColor=302D41"></a>
+<a href="https://github.com/evansrrr/BKNetwork/releases/latest">
+<img alt="Releases" src="https://img.shields.io/github/release/evansrrr/BKNetwork.svg?style=for-the-badge&logo=semantic-release&color=f5bde6&logoColor=D9E0EE&labelColor=302D41"/></a>
+<a href="https://github.com/evansrrr/BKNetwork/LICENSE">
+<img alt="License" src="https://img.shields.io/github/license/evansrrr/BKNetwork?style=for-the-badge&logo=conventionalcommits&color=ee99a0&logoColor=D9E0EE&labelColor=302D41"></a>
+<a href="https://github.com/evansrrr/BKNetwork/issues">
+<img alt="Issues" src="https://img.shields.io/github/issues/evansrrr/BKNetwork?style=for-the-badge&color=a6da95"></a>
 </div>
+
+<br />
 
 ![preview.webp](https://imgs.ich.cc.cd/file/public/1784371816472_preview.webp)
 
@@ -161,4 +166,4 @@ go test ./...
 
 **鸣谢**：
 
-  Hikio, Anon
+  Hikio，Anon，清风
