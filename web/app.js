@@ -1418,80 +1418,7 @@ async function applyEasyMode(enabled) {
 let lastNetworkCollectedAt = '';
 let lastSwitchTime = 0;
 
-function connectWS() {
-  const scheme = location.protocol === 'https:' ? 'wss' : 'ws';
-  const ws = new WebSocket(`${scheme}://${location.host}/ws`);
-
-  ws.addEventListener('open', () => {
-    setBackendBadge('ok');
-    appendLog('WebSocket 已连接');
-  });
-
-  ws.addEventListener('message', (event) => {
-    try {
-      const data = JSON.parse(event.data);
-      setBackendBadge(data.type === 'heartbeat' || data.type === 'hello' || data.type === 'network.status' ? 'ok' : (data.type === 'error' ? 'err' : 'ok'));
-      if (data.type === 'network.status') {
-        if (Date.now() - lastSwitchTime < 3000) {
-          return;
-        }
-        const collectedAt = data.data?.collectedAt || '';
-        if (collectedAt && collectedAt <= lastNetworkCollectedAt) {
-          return;
-        }
-        lastNetworkCollectedAt = collectedAt;
-        renderStatus({
-          service: { name: 'BKNetwork' },
-          lastEvent: { type: data.type, message: data.message },
-          network: data.data,
-        });
-        setText(lastUpdatedEl, `${new Date().toLocaleTimeString()}`);
-        markInitializationComplete();
-        return;
-      }
-      if (data.type === 'warp.ok') {
-        if (pendingToggleState.warp && pendingToggleState.warp.finishOnEvent === 'warp.ok') {
-          clearPendingToggle('warp');
-        }
-        if (pendingToggleState.easyMode && pendingToggleState.easyMode.finishOnEvent === 'warp.ok') {
-          clearPendingToggle('easyMode');
-        }
-        return;
-      }
-      if (data.type === 'switch.ok') {
-        if (pendingToggleState.easyMode && pendingToggleState.easyMode.finishOnEvent === 'switch.ok') {
-          applyOptimisticNetworkState({ warpConnected: false, adapterMode: 'both' });
-          clearPendingToggle('easyMode');
-          easyModeToggleEl.checked = false;
-          setText(easyModeStateEl, '当前关闭');
-          showConfigurationSuccess();
-        }
-        return;
-      }
-      if (data.type === 'heartbeat') {
-        return;
-      }
-      if (data.type === 'hello') {
-        return;
-      }
-      setText(lastResultEl, JSON.stringify(data, null, 2));
-      appendLog(`${data.type} · ${data.message}`);
-    } catch (err) {
-      console.error('WebSocket 消息解析失败:', err);
-      appendLog(String(event.data));
-    }
-  });
-
-  ws.addEventListener('close', () => {
-    setBackendBadge('err');
-    appendLog('WebSocket 已断开，准备重连');
-    setTimeout(connectWS, 2000);
-  });
-
-  ws.addEventListener('error', () => {
-    setBackendBadge('warn');
-  });
-}
+// connectWS is defined below, near the initialization block.
 
 if (advancedModeToggleEl) {
   advancedModeToggleEl.addEventListener('change', () => setAdvancedMode(advancedModeToggleEl.checked));
@@ -1613,6 +1540,87 @@ window.addEventListener('keydown', (event) => {
     setSettingsOpen(false);
   }
 });
+
+let activeWs = null;
+
+function connectWS() {
+  const scheme = location.protocol === 'https:' ? 'wss' : 'ws';
+  const ws = new WebSocket(`${scheme}://${location.host}/ws`);
+  activeWs = ws;
+
+  ws.addEventListener('open', () => {
+    setBackendBadge('ok');
+    appendLog('WebSocket 已连接');
+  });
+
+  ws.addEventListener('message', (event) => {
+    try {
+      const data = JSON.parse(event.data);
+      setBackendBadge(data.type === 'heartbeat' || data.type === 'hello' || data.type === 'network.status' ? 'ok' : (data.type === 'error' ? 'err' : 'ok'));
+      if (data.type === 'network.status') {
+        if (Date.now() - lastSwitchTime < 3000) {
+          return;
+        }
+        const collectedAt = data.data?.collectedAt || '';
+        if (collectedAt && collectedAt <= lastNetworkCollectedAt) {
+          return;
+        }
+        lastNetworkCollectedAt = collectedAt;
+        renderStatus({
+          service: { name: 'BKNetwork' },
+          lastEvent: { type: data.type, message: data.message },
+          network: data.data,
+        });
+        setText(lastUpdatedEl, `${new Date().toLocaleTimeString()}`);
+        markInitializationComplete();
+        return;
+      }
+      if (data.type === 'warp.ok') {
+        if (pendingToggleState.warp && pendingToggleState.warp.finishOnEvent === 'warp.ok') {
+          clearPendingToggle('warp');
+        }
+        if (pendingToggleState.easyMode && pendingToggleState.easyMode.finishOnEvent === 'warp.ok') {
+          clearPendingToggle('easyMode');
+        }
+        return;
+      }
+      if (data.type === 'switch.ok') {
+        if (pendingToggleState.easyMode && pendingToggleState.easyMode.finishOnEvent === 'switch.ok') {
+          applyOptimisticNetworkState({ warpConnected: false, adapterMode: 'both' });
+          clearPendingToggle('easyMode');
+          easyModeToggleEl.checked = false;
+          setText(easyModeStateEl, '当前关闭');
+          showConfigurationSuccess();
+        }
+        return;
+      }
+      if (data.type === 'heartbeat') {
+        return;
+      }
+      if (data.type === 'hello') {
+        return;
+      }
+      setText(lastResultEl, JSON.stringify(data, null, 2));
+      appendLog(`${data.type} · ${data.message}`);
+    } catch (err) {
+      console.error('WebSocket 消息解析失败:', err);
+      appendLog(String(event.data));
+    }
+  });
+
+  ws.addEventListener('close', () => {
+    if (activeWs === ws) {
+      activeWs = null;
+    }
+    setBackendBadge('err');
+    appendLog('WebSocket 已断开，准备重连');
+    setTimeout(connectWS, 2000);
+  });
+
+  ws.addEventListener('error', () => {
+    setBackendBadge('warn');
+  });
+}
 
 setAdvancedMode(false);
 showInitializationToast();
