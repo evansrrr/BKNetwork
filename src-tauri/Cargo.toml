@@ -1,6 +1,6 @@
 [package]
 name = "bknetwork-desktop"
-version = "1.0.2"
+version = "1.0.1"
 description = "Tauri desktop shell for BKNetwork"
 authors = ["BKNetwork contributors"]
 edition = "2024"
