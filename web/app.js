@@ -1633,3 +1633,30 @@ window.addEventListener('load', () => {
 }, { once: true });
 setInterval(refreshTrafficUsage, 60000);
 connectWS();
+
+// 拦截外部链接点击，在系统浏览器中打开
+// 由于 webview 加载的是外部 URL，Tauri JS API 不可用
+// 这里使用 window.open 触发 on_new_window 回调，由 Rust 端处理
+document.addEventListener('click', (event) => {
+  const link = event.target.closest('a[href]');
+  if (!link) return;
+
+  const href = link.getAttribute('href');
+  if (!href) return;
+
+  // 仅处理 http/https 链接
+  if (!href.startsWith('http://') && !href.startsWith('https://')) return;
+
+  // 后端链接允许在 webview 内正常导航
+  try {
+    const url = new URL(href, location.origin);
+    if (url.hostname === '127.0.0.1' || url.hostname === 'localhost') return;
+  } catch {
+    return;
+  }
+
+  // 阻止默认导航，改为 window.open 触发 on_new_window
+  event.preventDefault();
+  event.stopPropagation();
+  window.open(href, '_blank');
+}, true);
