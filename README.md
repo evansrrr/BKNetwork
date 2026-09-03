@@ -31,11 +31,13 @@
 
 **免流模式** 包含 `Warp` 和 `DNS64` 两种，开一个就行。切换通常10s内完成，视网络状态好坏
 
-`Warp 免流模式` 需要安装 Cloudflare Warp，首次运行选择左侧 "Private browsing"，同意使用条款继续，重启后可以使用 `Warp 免流模式`。首次使用请在高级模式查看目标网卡，确认自动选择的是上网网卡，例如 WiFi/WLAN，而**不是**Warp网卡
+`Warp 免流模式` 需要安装 Cloudflare Warp，首次运行选择左侧 "Private browsing"，同意使用条款继续，**重启**后可以使用 `Warp 免流模式`。首次使用请在高级模式查看目标网卡，确认自动选择的是上网网卡，例如 WiFi/WLAN，而**不是Warp网卡**
 
 Cloudflare Warp 软件下载页面（1.1.1.1）大陆地区目前无法访问，可以直接[点此下载Windows最新版本](https://1111-releases.cloudflareclient.com/win/latest)，这是官方下载链接
 
 对于北科校园网，`USTB-Student` 和 `USTB-V6` 支持免流，`USTB_Wi-Fi` 不支持。换句话说，免流前提是连接 `USTB-Student` 或 `USTB-V6`，校园网账号认证成功，并且电脑可以正常获取 ipv6 地址（[testipv6](https://www.testipv6.cn/)）
+
+开启免流时最好先关闭代理工具
 
 **高级模式** 更详细的网络状态与控制选项
 
@@ -61,6 +63,7 @@ Cloudflare Warp 软件下载页面（1.1.1.1）大陆地区目前无法访问，
    - Warp 确实偶尔连不上，稍后再试
    - 确认 Cloudflare WARP 客户端已安装，且在 PATH 中可访问（首次安装重启）
    - 更换一个 ipv6 DNS，比如 Cloudflare 或阿里的
+   - 其他代理工具可能干扰连接，关闭重试
    - 类似 VMware、 Tailscale 和蓝牙的虚拟网卡可能干扰 Warp 的 DNS 连接，考虑禁用这些虚拟网卡
 
 4. 免流模式不能访问校园网内网（例如校园网登录页）
