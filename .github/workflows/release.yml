@@ -1,0 +1,77 @@
+name: Release desktop app
+
+on:
+  push:
+    tags:
+      - 'v*.*.*'
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  release:
+    name: Build ${{ matrix.name }} package
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: Windows x64
+            platform: windows-latest
+            target: x86_64-pc-windows-msvc
+            bundles: nsis
+            signing_identity: ''
+          - name: macOS Apple Silicon
+            platform: macos-latest
+            target: aarch64-apple-darwin
+            bundles: dmg
+            signing_identity: '-'
+          - name: macOS Intel
+            platform: macos-latest
+            target: x86_64-apple-darwin
+            bundles: dmg
+            signing_identity: '-'
+    runs-on: ${{ matrix.platform }}
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-go@v6
+        with:
+          go-version-file: go.mod
+          cache-dependency-path: go.sum
+      - uses: actions/setup-node@v6
+        with:
+          node-version: lts/*
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri -> .target
+          shared-key: ${{ matrix.target }}
+
+      - name: Verify tag matches app version
+        shell: pwsh
+        run: |
+          $metadata = cargo metadata --format-version 1 --no-deps --manifest-path src-tauri/Cargo.toml | ConvertFrom-Json
+          $version = ($metadata.packages | Where-Object { $_.name -eq 'bknetwork-desktop' } | Select-Object -First 1).version
+          if ('${{ github.ref_name }}' -ne "v$version") {
+            throw "Tag ${{ github.ref_name }} does not match Cargo version v$version"
+          }
+
+      - name: Build and publish Tauri installer
+        uses: tauri-apps/tauri-action@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          APPLE_SIGNING_IDENTITY: ${{ matrix.signing_identity }}
+          BKNETWORK_TARGET_TRIPLE: ${{ matrix.target }}
+        with:
+          tagName: ${{ github.ref_name }}
+          releaseName: 'BKNetwork v__VERSION__'
+          releaseBody: 'Windows 11 x64 and macOS packages. These community builds are not code-signed with a trusted certificate.'
+          releaseDraft: false
+          prerelease: false
+          args: --target ${{ matrix.target }} --bundles ${{ matrix.bundles }}
+          releaseAssetNamePattern: '[name]_[version]_[arch][setup].[ext]'

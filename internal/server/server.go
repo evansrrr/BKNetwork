@@ -2,16 +2,19 @@ package server
 
 import (
 	"context"
+	"crypto/subtle"
 	"fmt"
 	"log"
 	"net/http"
 	"os"
 	"os/signal"
 	"path/filepath"
+	"strings"
 	"syscall"
 
 	"bknetwork/internal/events"
 	"bknetwork/internal/handlers"
+	webassets "bknetwork/web"
 )
 
 type Server struct {
@@ -20,6 +23,8 @@ type Server struct {
 }
 
 const DefaultAddr = "127.0.0.1:13335"
+
+const sessionCookieName = "bknetwork_session"
 
 func NewServer(addr string) *Server {
 	if addr == "" {
@@ -40,18 +45,54 @@ func NewServer(addr string) *Server {
 	if webDir, ok := resolveWebDir(); ok {
 		mux.Handle("/", http.FileServer(http.Dir(webDir)))
 	} else {
-		mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
-			http.NotFound(w, r)
-		})
+		mux.Handle("/", http.FileServer(http.FS(webassets.Assets)))
+	}
+
+	var handler http.Handler = mux
+	if token := strings.TrimSpace(os.Getenv("BKNETWORK_API_TOKEN")); token != "" {
+		handler = localAuthHandler(mux, token)
 	}
 
 	return &Server{
 		hub: hub,
 		httpServer: &http.Server{
 			Addr:    addr,
-			Handler: mux,
+			Handler: handler,
 		},
 	}
+}
+
+func localAuthHandler(next http.Handler, token string) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/" && secureTokenEqual(r.URL.Query().Get("token"), token) {
+			http.SetCookie(w, &http.Cookie{
+				Name:     sessionCookieName,
+				Value:    token,
+				Path:     "/",
+				HttpOnly: true,
+				SameSite: http.SameSiteStrictMode,
+			})
+			w.Header().Set("Cache-Control", "no-store")
+			http.Redirect(w, r, "/", http.StatusSeeOther)
+			return
+		}
+
+		if strings.HasPrefix(r.Header.Get("Authorization"), "Bearer ") &&
+			secureTokenEqual(strings.TrimPrefix(r.Header.Get("Authorization"), "Bearer "), token) {
+			next.ServeHTTP(w, r)
+			return
+		}
+		if cookie, err := r.Cookie(sessionCookieName); err == nil && secureTokenEqual(cookie.Value, token) {
+			next.ServeHTTP(w, r)
+			return
+		}
+
+		http.Error(w, "unauthorized", http.StatusUnauthorized)
+	})
+}
+
+func secureTokenEqual(left, right string) bool {
+	return subtle.ConstantTimeCompare([]byte(left), []byte(right)) == 1
 }
 
 func resolveWebDir() (string, bool) {

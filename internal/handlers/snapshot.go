@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"log"
 	"net"
+	"runtime"
 	"sort"
 	"strings"
 	"sync"
@@ -100,20 +101,23 @@ func normalizeStringSlice(v any) []string {
 }
 
 func collectNetworkSnapshot() (networkSnapshot, error) {
+	if runtime.GOOS == "darwin" {
+		return collectDarwinNetworkSnapshot()
+	}
 	baseCtx := context.Background()
 
 	var (
-		basicRaw        string
-		ipv4Binding     map[string]bool
-		ipv6Binding     map[string]bool
-		ipv4Configs     []netshIPConfig
+		basicRaw         string
+		ipv4Binding      map[string]bool
+		ipv6Binding      map[string]bool
+		ipv4Configs      []netshIPConfig
 		ipv4DefaultRoute string
 		ipv6DefaultRoute string
-		dnsIPv4         []netshDNSEntry
-		dnsIPv6         []netshDNSEntry
-		warpStatus      warpSnapshot
-		warpSettings    warpSettingsSnapshot
-		tcpProbe        tcpProbeSnapshot
+		dnsIPv4          []netshDNSEntry
+		dnsIPv6          []netshDNSEntry
+		warpStatus       warpSnapshot
+		warpSettings     warpSettingsSnapshot
+		tcpProbe         tcpProbeSnapshot
 	)
 
 	var wg sync.WaitGroup
