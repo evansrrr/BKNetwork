@@ -44,6 +44,7 @@ fn main() {
         .plugin(tauri_plugin_single_instance::init(|app, _args, _cwd| {
             show_main_window(app);
         }))
+        .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_shell::init())
         .setup(|app| {
             let api_token = create_api_token()?;
@@ -242,9 +243,13 @@ fn create_tray(app: &tauri::App) -> tauri::Result<()> {
 
 fn show_main_window<R: Runtime>(app: &AppHandle<R>) {
     if let Some(window) = app.get_webview_window("main") {
+        let was_hidden = window.is_visible().map(|v| !v).unwrap_or(false);
         let _ = window.unminimize();
         let _ = window.show();
         let _ = window.set_focus();
+        if was_hidden {
+            let _ = window.eval("location.reload()");
+        }
     }
 }
 

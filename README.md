@@ -7,12 +7,17 @@
 
 <br />
 
-[![Stars](https://img.shields.io/github/stars/evansrrr/BKNetwork?style=flat)](https://github.com/evansrrr/BKNetwork/stargazers)
-[![Version](https://img.shields.io/github/v/release/evansrrr/BKNetwork)](https://github.com/evansrrr/BKNetwork/releases)
-[![License](https://img.shields.io/github/license/evansrrr/BKNetwork)](https://github.com/evansrrr/BKNetwork/blob/dev/LICENSE)
-[![Issues](https://img.shields.io/github/issues/evansrrr/BKNetwork)](https://github.com/evansrrr/BKNetwork/issues)
-
+<a href="https://github.com/evansrrr/BKNetwork/stargazers">
+<img alt="Stargazers" src="https://img.shields.io/github/stars/evansrrr/BKNetwork?style=for-the-badge&logo=github&color=f4dbd6&logoColor=D9E0EE&labelColor=302D41"></a>
+<a href="https://github.com/evansrrr/BKNetwork/releases/latest">
+<img alt="Releases" src="https://img.shields.io/github/release/evansrrr/BKNetwork.svg?style=for-the-badge&logo=semantic-release&color=f5bde6&logoColor=D9E0EE&labelColor=302D41"/></a>
+<a href="https://github.com/evansrrr/BKNetwork/LICENSE">
+<img alt="License" src="https://img.shields.io/github/license/evansrrr/BKNetwork?style=for-the-badge&logo=conventionalcommits&color=ee99a0&logoColor=D9E0EE&labelColor=302D41"></a>
+<a href="https://github.com/evansrrr/BKNetwork/issues">
+<img alt="Issues" src="https://img.shields.io/github/issues/evansrrr/BKNetwork?style=for-the-badge&color=a6da95"></a>
 </div>
+
+<br />
 
 ![preview.webp](https://imgs.ich.cc.cd/file/public/1784371816472_preview.webp)
 
@@ -23,19 +28,21 @@
 - Windows 11 x64
 - macOS 11+（Apple Silicon 与 Intel）
 
-在 [Releases](https://github.com/evansrrr/BKNetwork/releases/latest) 下载对应平台的安装包：Windows 使用 `-setup.exe`，macOS 使用对应芯片架构的 `.dmg`。社区构建目前没有受信任的商业签名，Windows 首次打开可能需要在系统提示中选择继续运行；macOS 首次打开可右键应用选择“打开”，或在“系统设置 → 隐私与安全性”中允许打开。
+在 [Releases](https://github.com/evansrrr/BKNetwork/releases/latest) 下载对应平台的安装包。Windows 首次打开可能需要在系统提示中选择继续运行；macOS 首次打开可右键应用选择“打开”，或在“系统设置 → 隐私与安全性”中允许打开。这是因为软件没有签名，不必担心。如果遇到提示需要管理员权限，请选择同意。
 
-运行软件后会在系统托盘/菜单栏显示图标，单击可打开界面，右键点击可 `退出`。界面由 Tauri 承载，本地 Go sidecar 仅监听 `127.0.0.1:13335`。
+运行软件后会在系统托盘/菜单栏显示图标，单击可打开界面，右键点击可 `退出`。
 
 **免流模式** 包含 `Warp` 和 `DNS64` 两种，开一个就行。切换通常10s内完成，视网络状态好坏
 
-`Warp 免流模式` 需要安装 Cloudflare Warp，首次运行选择左侧 "Private browsing"，同意使用条款继续，重启后可以使用 `Warp 免流模式`。首次使用请在高级模式查看目标网卡，确认自动选择的是上网网卡，例如 WiFi/WLAN，而**不是**Warp网卡。
+`Warp 免流模式` 需要安装 Cloudflare Warp，首次运行选择左侧 "Private browsing"，同意使用条款继续，**重启**后可以使用 `Warp 免流模式`。首次使用请在高级模式查看目标网卡，确认自动选择的是上网网卡，例如 WiFi/WLAN，而**不是Warp网卡**。
 
 Windows 的网络变更由已提权进程执行；macOS 在实际修改 IPv4/IPv6 或 DNS 时会显示系统管理员授权弹窗。
 
 Cloudflare Warp 软件下载页面（1.1.1.1）大陆地区目前无法访问，可以直接[点此下载Windows最新版本](https://1111-releases.cloudflareclient.com/win/latest)，这是官方下载链接
 
 对于北科校园网，`USTB-Student` 和 `USTB-V6` 支持免流，`USTB_Wi-Fi` 不支持。换句话说，免流前提是连接 `USTB-Student` 或 `USTB-V6`，校园网账号认证成功，并且电脑可以正常获取 ipv6 地址（[testipv6](https://www.testipv6.cn/)）
+
+开启免流时最好先关闭代理工具
 
 **高级模式** 更详细的网络状态与控制选项
 
@@ -61,6 +68,7 @@ Cloudflare Warp 软件下载页面（1.1.1.1）大陆地区目前无法访问，
    - Warp 确实偶尔连不上，稍后再试
    - 确认 Cloudflare WARP 客户端已安装，且在 PATH 中可访问（首次安装重启）
    - 更换一个 ipv6 DNS，比如 Cloudflare 或阿里的
+   - 其他代理工具可能干扰连接，关闭重试
    - 类似 VMware、 Tailscale 和蓝牙的虚拟网卡可能干扰 Warp 的 DNS 连接，考虑禁用这些虚拟网卡
 
 4. 免流模式不能访问校园网内网（例如校园网登录页）
@@ -77,7 +85,7 @@ Cloudflare Warp 软件下载页面（1.1.1.1）大陆地区目前无法访问，
 
 ## 开发
 
-**开发 Tauri 桌面端**
+**Tauri 桌面端**
 
 需要 Go 1.25+、Rust stable 和平台对应的 Tauri 系统依赖。Windows 还需要 Visual Studio C++ Build Tools；macOS 需要 Xcode Command Line Tools。
 
@@ -85,7 +93,7 @@ Cloudflare Warp 软件下载页面（1.1.1.1）大陆地区目前无法访问，
 # 安装 Tauri CLI（只需一次）
 cargo install tauri-cli --version "^2.0.0" --locked
 
-# 开发运行；构建钩子会自动生成当前架构的 Go sidecar
+# 开发运行；构建hook会自动生成当前架构的 Go sidecar
 cargo tauri dev
 
 # 生成当前平台安装包
@@ -101,7 +109,7 @@ pipx install pre-commit
 pre-commit install
 ```
 
-**仅构建旧版 Go 入口**
+**仅构建 Go 入口**
 
 ```bash
 cd BKNetwork
@@ -158,8 +166,6 @@ git tag v1.1.0
 git push origin v1.1.0
 ```
 
-如需消除 Windows SmartScreen 和 macOS Gatekeeper 提示，需要后续在仓库 Secrets 中接入对应平台的代码签名证书；当前流程会明确产出未受信任证书签名的社区构建。
-
 ## TODO
 
 - [x] 修复浏览器新实例bug
@@ -173,6 +179,7 @@ git push origin v1.1.0
 - [x] 分离css js
 - [x] 低饱和度扁平化UI
 - [x] 应用图标
+- [ ] 适配tauri
 - [ ] 退出清理进程
 - [ ] 自动登录
 - [ ] 纯warp-cli
@@ -203,4 +210,4 @@ git push origin v1.1.0
 
 **鸣谢**：
 
-  Hikio, Anon
+  Hikio，Anon，清风，Anon，SanchoTian，Gordon
