@@ -1418,80 +1418,7 @@ async function applyEasyMode(enabled) {
 let lastNetworkCollectedAt = '';
 let lastSwitchTime = 0;
 
-function connectWS() {
-  const scheme = location.protocol === 'https:' ? 'wss' : 'ws';
-  const ws = new WebSocket(`${scheme}://${location.host}/ws`);
-
-  ws.addEventListener('open', () => {
-    setBackendBadge('ok');
-    appendLog('WebSocket 已连接');
-  });
-
-  ws.addEventListener('message', (event) => {
-    try {
-      const data = JSON.parse(event.data);
-      setBackendBadge(data.type === 'heartbeat' || data.type === 'hello' || data.type === 'network.status' ? 'ok' : (data.type === 'error' ? 'err' : 'ok'));
-      if (data.type === 'network.status') {
-        if (Date.now() - lastSwitchTime < 3000) {
-          return;
-        }
-        const collectedAt = data.data?.collectedAt || '';
-        if (collectedAt && collectedAt <= lastNetworkCollectedAt) {
-          return;
-        }
-        lastNetworkCollectedAt = collectedAt;
-        renderStatus({
-          service: { name: 'BKNetwork' },
-          lastEvent: { type: data.type, message: data.message },
-          network: data.data,
-        });
-        setText(lastUpdatedEl, `${new Date().toLocaleTimeString()}`);
-        markInitializationComplete();
-        return;
-      }
-      if (data.type === 'warp.ok') {
-        if (pendingToggleState.warp && pendingToggleState.warp.finishOnEvent === 'warp.ok') {
-          clearPendingToggle('warp');
-        }
-        if (pendingToggleState.easyMode && pendingToggleState.easyMode.finishOnEvent === 'warp.ok') {
-          clearPendingToggle('easyMode');
-        }
-        return;
-      }
-      if (data.type === 'switch.ok') {
-        if (pendingToggleState.easyMode && pendingToggleState.easyMode.finishOnEvent === 'switch.ok') {
-          applyOptimisticNetworkState({ warpConnected: false, adapterMode: 'both' });
-          clearPendingToggle('easyMode');
-          easyModeToggleEl.checked = false;
-          setText(easyModeStateEl, '当前关闭');
-          showConfigurationSuccess();
-        }
-        return;
-      }
-      if (data.type === 'heartbeat') {
-        return;
-      }
-      if (data.type === 'hello') {
-        return;
-      }
-      setText(lastResultEl, JSON.stringify(data, null, 2));
-      appendLog(`${data.type} · ${data.message}`);
-    } catch (err) {
-      console.error('WebSocket 消息解析失败:', err);
-      appendLog(String(event.data));
-    }
-  });
-
-  ws.addEventListener('close', () => {
-    setBackendBadge('err');
-    appendLog('WebSocket 已断开，准备重连');
-    setTimeout(connectWS, 2000);
-  });
-
-  ws.addEventListener('error', () => {
-    setBackendBadge('warn');
-  });
-}
+// connectWS is defined below, near the initialization block.
 
 if (advancedModeToggleEl) {
   advancedModeToggleEl.addEventListener('change', () => setAdvancedMode(advancedModeToggleEl.checked));
@@ -1614,6 +1541,87 @@ window.addEventListener('keydown', (event) => {
   }
 });
 
+let activeWs = null;
+
+function connectWS() {
+  const scheme = location.protocol === 'https:' ? 'wss' : 'ws';
+  const ws = new WebSocket(`${scheme}://${location.host}/ws`);
+  activeWs = ws;
+
+  ws.addEventListener('open', () => {
+    setBackendBadge('ok');
+    appendLog('WebSocket 已连接');
+  });
+
+  ws.addEventListener('message', (event) => {
+    try {
+      const data = JSON.parse(event.data);
+      setBackendBadge(data.type === 'heartbeat' || data.type === 'hello' || data.type === 'network.status' ? 'ok' : (data.type === 'error' ? 'err' : 'ok'));
+      if (data.type === 'network.status') {
+        if (Date.now() - lastSwitchTime < 3000) {
+          return;
+        }
+        const collectedAt = data.data?.collectedAt || '';
+        if (collectedAt && collectedAt <= lastNetworkCollectedAt) {
+          return;
+        }
+        lastNetworkCollectedAt = collectedAt;
+        renderStatus({
+          service: { name: 'BKNetwork' },
+          lastEvent: { type: data.type, message: data.message },
+          network: data.data,
+        });
+        setText(lastUpdatedEl, `${new Date().toLocaleTimeString()}`);
+        markInitializationComplete();
+        return;
+      }
+      if (data.type === 'warp.ok') {
+        if (pendingToggleState.warp && pendingToggleState.warp.finishOnEvent === 'warp.ok') {
+          clearPendingToggle('warp');
+        }
+        if (pendingToggleState.easyMode && pendingToggleState.easyMode.finishOnEvent === 'warp.ok') {
+          clearPendingToggle('easyMode');
+        }
+        return;
+      }
+      if (data.type === 'switch.ok') {
+        if (pendingToggleState.easyMode && pendingToggleState.easyMode.finishOnEvent === 'switch.ok') {
+          applyOptimisticNetworkState({ warpConnected: false, adapterMode: 'both' });
+          clearPendingToggle('easyMode');
+          easyModeToggleEl.checked = false;
+          setText(easyModeStateEl, '当前关闭');
+          showConfigurationSuccess();
+        }
+        return;
+      }
+      if (data.type === 'heartbeat') {
+        return;
+      }
+      if (data.type === 'hello') {
+        return;
+      }
+      setText(lastResultEl, JSON.stringify(data, null, 2));
+      appendLog(`${data.type} · ${data.message}`);
+    } catch (err) {
+      console.error('WebSocket 消息解析失败:', err);
+      appendLog(String(event.data));
+    }
+  });
+
+  ws.addEventListener('close', () => {
+    if (activeWs === ws) {
+      activeWs = null;
+    }
+    setBackendBadge('err');
+    appendLog('WebSocket 已断开，准备重连');
+    setTimeout(connectWS, 2000);
+  });
+
+  ws.addEventListener('error', () => {
+    setBackendBadge('warn');
+  });
+}
+
 setAdvancedMode(false);
 showInitializationToast();
 
@@ -1625,3 +1633,30 @@ window.addEventListener('load', () => {
 }, { once: true });
 setInterval(refreshTrafficUsage, 60000);
 connectWS();
+
+// 拦截外部链接点击，在系统浏览器中打开
+// 由于 webview 加载的是外部 URL，Tauri JS API 不可用
+// 这里使用 window.open 触发 on_new_window 回调，由 Rust 端处理
+document.addEventListener('click', (event) => {
+  const link = event.target.closest('a[href]');
+  if (!link) return;
+
+  const href = link.getAttribute('href');
+  if (!href) return;
+
+  // 仅处理 http/https 链接
+  if (!href.startsWith('http://') && !href.startsWith('https://')) return;
+
+  // 后端链接允许在 webview 内正常导航
+  try {
+    const url = new URL(href, location.origin);
+    if (url.hostname === '127.0.0.1' || url.hostname === 'localhost') return;
+  } catch {
+    return;
+  }
+
+  // 阻止默认导航，改为 window.open 触发 on_new_window
+  event.preventDefault();
+  event.stopPropagation();
+  window.open(href, '_blank');
+}, true);
