@@ -210,4 +210,4 @@ git push origin v1.1.0
 
 **鸣谢**：
 
-  Hikio，Anon，清风，Anon，SanchoTian，Gordon，Debuci
+  Hikio，Anon，清风，Anon，SanchoTian，Gordon，·，Debuci
