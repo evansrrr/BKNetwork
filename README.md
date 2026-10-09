@@ -21,6 +21,10 @@
 
 ![preview.webp](https://imgs.ich.cc.cd/file/public/1784371816472_preview.webp)
 
+> [!TIP]
+>
+> 本项目即将进入维护模式，新功能请移步 [FreeV6](https://github.com/evansrrr/free-v6)
+
 ## 说明
 
 支持以下桌面平台：
@@ -202,12 +206,8 @@ git push origin v1.1.0
 
 ## 赞赏
 
-感谢支持！请我杯喝的QwQ
-
-<img alt="reward" height="250" width="250" src="https://img.ich.cc.cd/file/ichblog/img/reward.jpg" />
-
-<br />
-
 **鸣谢**：
 
   Hikio，Anon，清风，Anon，SanchoTian，Gordon，·，Debuci，听枫
+
+感谢他们的支持，新功能请移步 [FreeV6](https://github.com/evansrrr/free-v6)
