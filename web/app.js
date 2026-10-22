@@ -1036,6 +1036,12 @@ function currentIfName() {
   return value || 'WiFi';
 }
 
+function isWarpAdapterName(name) {
+  if (typeof name !== 'string') return false;
+  const n = name.trim().toLowerCase();
+  return n.includes('warp') || n.includes('cloudflare');
+}
+
 function getAdapterOptions(network) {
   const names = Array.isArray(network?.availableAdapters) ? network.availableAdapters : [];
   if (names.length > 0) {
@@ -1046,10 +1052,20 @@ function getAdapterOptions(network) {
     : [];
 }
 
+// pickDefaultAdapter chooses the best fallback when the current selection is unavailable.
+// Prefer non-WARP physical adapters so auto-selection does not land on the tunnel.
+function pickDefaultAdapter(options) {
+  if (!Array.isArray(options) || options.length === 0) {
+    return 'WiFi';
+  }
+  const physical = options.find(name => !isWarpAdapterName(name));
+  return physical || options[0] || 'WiFi';
+}
+
 function syncTargetAdapterSelects(names) {
   const options = Array.isArray(names) ? names : [];
   const current = currentIfName();
-  const desired = options.includes(current) ? current : (options[0] || 'WiFi');
+  const desired = options.includes(current) ? current : pickDefaultAdapter(options);
 
   for (const select of targetAdapterSelects) {
     if (!select) continue;
@@ -1071,7 +1087,7 @@ function syncTargetAdapterSelects(names) {
     select.value = options.includes(previous) ? previous : desired;
   }
 
-  const selected = options.includes(desired) ? desired : (options[0] || 'WiFi');
+  const selected = options.includes(desired) ? desired : pickDefaultAdapter(options);
   setTargetAdapter(selected);
 }
 

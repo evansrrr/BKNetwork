@@ -3,6 +3,7 @@ package handlers
 import (
 	"context"
 	"regexp"
+	"strconv"
 	"strings"
 )
 
@@ -148,36 +149,46 @@ func parseNetshIPv4Config(raw string) []netshIPConfig {
 	return configs
 }
 
-// parseNetshIPv4DefaultRouteWithIdx parses the route table and returns the interface name for the default route.
-func parseNetshIPv4DefaultRouteWithIdx(raw string, ifaceMap map[string]string) string {
-	lines := strings.Split(raw, "\n")
-	for _, line := range lines {
-		line = strings.TrimSpace(line)
-		if line == "" || strings.HasPrefix(line, "Publish") || strings.HasPrefix(line, "---") {
-			continue
-		}
-		fields := strings.Fields(line)
-		if len(fields) < 5 {
-			continue
-		}
-		// Find the prefix field (contains "0.0.0.0/0" for default route)
-		for i, f := range fields {
-			if f == "0.0.0.0/0" {
-				// Idx is at position 4 (after Publish, Type, Met, Prefix)
-				if i+1 < len(fields) {
-					idx := fields[i+1]
-					if name, ok := ifaceMap[idx]; ok {
-						return name
-					}
-				}
-			}
-		}
-	}
-	return ""
+// isWarpAdapterName reports whether the adapter name refers to the Cloudflare WARP tunnel.
+func isWarpAdapterName(name string) bool {
+	n := strings.ToLower(strings.TrimSpace(name))
+	return strings.Contains(n, "warp") || strings.Contains(n, "cloudflare")
 }
 
-// parseNetshIPv6DefaultRouteWithIdx parses the route table and returns the interface name for the default route.
-func parseNetshIPv6DefaultRouteWithIdx(raw string, ifaceMap map[string]string) string {
+// defaultRouteCandidate holds one default-route entry parsed from the route table.
+type defaultRouteCandidate struct {
+	name   string
+	metric int
+	isWarp bool
+}
+
+// pickDefaultRoute returns the best interface name among default-route candidates.
+// Preference order: non-WARP over WARP, then lower metric (higher priority).
+func pickDefaultRoute(candidates []defaultRouteCandidate) string {
+	if len(candidates) == 0 {
+		return ""
+	}
+	best := candidates[0]
+	for _, c := range candidates[1:] {
+		if c.isWarp != best.isWarp {
+			if !c.isWarp {
+				best = c
+			}
+			continue
+		}
+		if c.metric < best.metric {
+			best = c
+		}
+	}
+	return best.name
+}
+
+// parseNetshIPv4DefaultRouteWithIdx parses the IPv4 route table and returns the
+// interface name that should be treated as the default (physical) route.
+// When WARP is active it also installs a default route; prefer the non-WARP
+// interface so downstream logic does not mistakenly target the tunnel adapter.
+func parseNetshIPv4DefaultRouteWithIdx(raw string, ifaceMap map[string]string) string {
+	var candidates []defaultRouteCandidate
 	lines := strings.Split(raw, "\n")
 	for _, line := range lines {
 		line = strings.TrimSpace(line)
@@ -188,20 +199,66 @@ func parseNetshIPv6DefaultRouteWithIdx(raw string, ifaceMap map[string]string) s
 		if len(fields) < 5 {
 			continue
 		}
-		// Find the prefix field (contains "::/0" for default route)
 		for i, f := range fields {
-			if f == "::/0" {
-				// Idx is at position 4 (after Publish, Type, Met, Prefix)
-				if i+1 < len(fields) {
-					idx := fields[i+1]
-					if name, ok := ifaceMap[idx]; ok {
-						return name
-					}
-				}
+			if f != "0.0.0.0/0" {
+				continue
 			}
+			// Layout: ... Metric Prefix Idx Gateway Interface ...
+			if i < 1 || i+1 >= len(fields) {
+				continue
+			}
+			metric, _ := strconv.Atoi(fields[i-1])
+			idx := fields[i+1]
+			name, ok := ifaceMap[idx]
+			if !ok {
+				continue
+			}
+			candidates = append(candidates, defaultRouteCandidate{
+				name:   name,
+				metric: metric,
+				isWarp: isWarpAdapterName(name),
+			})
 		}
 	}
-	return ""
+	return pickDefaultRoute(candidates)
+}
+
+// parseNetshIPv6DefaultRouteWithIdx parses the IPv6 route table and returns the
+// interface name that should be treated as the default (physical) route.
+func parseNetshIPv6DefaultRouteWithIdx(raw string, ifaceMap map[string]string) string {
+	var candidates []defaultRouteCandidate
+	lines := strings.Split(raw, "\n")
+	for _, line := range lines {
+		line = strings.TrimSpace(line)
+		if line == "" || strings.HasPrefix(line, "Publish") || strings.HasPrefix(line, "---") {
+			continue
+		}
+		fields := strings.Fields(line)
+		if len(fields) < 5 {
+			continue
+		}
+		for i, f := range fields {
+			if f != "::/0" {
+				continue
+			}
+			// Layout: ... Metric Prefix Idx Gateway Interface ...
+			if i < 1 || i+1 >= len(fields) {
+				continue
+			}
+			metric, _ := strconv.Atoi(fields[i-1])
+			idx := fields[i+1]
+			name, ok := ifaceMap[idx]
+			if !ok {
+				continue
+			}
+			candidates = append(candidates, defaultRouteCandidate{
+				name:   name,
+				metric: metric,
+				isWarp: isWarpAdapterName(name),
+			})
+		}
+	}
+	return pickDefaultRoute(candidates)
 }
 
 // parseNetshDNSServers parses output from "netsh interface ipv4/ipv6 show dnsservers".
