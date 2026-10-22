@@ -70,7 +70,7 @@ Cloudflare Warp 软件下载页面（1.1.1.1）大陆地区目前无法访问，
 3. 无法使用Warp免流
 
    - Warp 确实偶尔连不上，稍后再试
-   - 确认 Cloudflare WARP 客户端已安装，且在 PATH 中可访问（首次安装重启）
+   - 确认 Cloudflare WARP 客户端已安装，且在 PATH 中可访问（首次安装需要重启）
    - 更换一个 ipv6 DNS，比如 Cloudflare 或阿里的
    - 其他代理工具可能干扰连接，关闭重试
    - 类似 VMware、 Tailscale 和蓝牙的虚拟网卡可能干扰 Warp 的 DNS 连接，考虑禁用这些虚拟网卡
@@ -169,26 +169,6 @@ go test ./...
 git tag v1.1.0
 git push origin v1.1.0
 ```
-
-## TODO
-
-- [x] 修复浏览器新实例bug
-- [x] 新版本检测
-- [x] 增加DNS64
-- [x] 优化反馈频率
-- [x] Warp连接失败反馈->更改探测方式
-- [x] “更多免流”链接
-- [x] 修复dns64免流开关闪烁
-- [x] 缩减后端开销
-- [x] 分离css js
-- [x] 低饱和度扁平化UI
-- [x] 应用图标
-- [ ] 适配tauri
-- [ ] 退出清理进程
-- [ ] 自动登录
-- [ ] 纯warp-cli
-- [ ] 部分warp设置
-
 
 ## 免责声明
 
