@@ -206,9 +206,56 @@ func setAdapterDnsServers(ifName string, servers []string) (string, error) {
 	if err != nil {
 		return out, err
 	}
-	// Wait for the OS to update the DNS configuration
-	time.Sleep(300 * time.Millisecond)
+	waitForDnsServers(ctx, ifName, servers)
 	return out, nil
+}
+
+// dnsVerifyTimeout bounds how long waitForDnsServers keeps re-reading the
+// adapter after a write. Windows normally applies the change immediately, so
+// the poll usually returns on the first read; the old fixed 300ms sleep could
+// both return too early (stale read for the caller's read-back) and waste
+// 300ms when the change had already landed.
+const (
+	dnsVerifyTimeout  = 3 * time.Second
+	dnsVerifyPollStep = 150 * time.Millisecond
+)
+
+// waitForDnsServers re-reads the adapter configuration until every server that
+// was just written shows up, or until the deadline (or the request context)
+// expires. Timing out is not an error: the write itself succeeded and the
+// caller reports the requested state either way, so this only replaces the
+// previous blind wait with a check that cannot say "done" before it is true.
+func waitForDnsServers(ctx context.Context, ifName string, want []string) {
+	deadline := time.Now().Add(dnsVerifyTimeout)
+	for {
+		gotIPv4, gotIPv6, err := getAdapterDnsServers(ifName)
+		if err == nil && dnsServersCovered(append(append([]string(nil), gotIPv4...), gotIPv6...), want) {
+			return
+		}
+		if time.Now().After(deadline) {
+			return
+		}
+		select {
+		case <-ctx.Done():
+			return
+		case <-time.After(dnsVerifyPollStep):
+		}
+	}
+}
+
+// dnsServersCovered reports whether every wanted server (case-insensitive,
+// whitespace-trimmed) is present in the list that was read back.
+func dnsServersCovered(have, want []string) bool {
+	seen := make(map[string]struct{}, len(have))
+	for _, server := range have {
+		seen[strings.ToLower(strings.TrimSpace(server))] = struct{}{}
+	}
+	for _, server := range want {
+		if _, ok := seen[strings.ToLower(strings.TrimSpace(server))]; !ok {
+			return false
+		}
+	}
+	return true
 }
 
 func applyDnsServers(ifName string, ipv4Servers, ipv6Servers *[]string) (string, error) {
