@@ -100,6 +100,15 @@ func normalizeStringSlice(v any) []string {
 	return out
 }
 
+// adapterGateway holds the gateways taken from the default routes. The old code
+// read them from "netsh interface ipv4 show config", whose labels are
+// localized; the route table already carries the same address and is collected
+// anyway, so that process is gone.
+type adapterGateway struct {
+	IPv4 string
+	IPv6 string
+}
+
 func collectNetworkSnapshot() (networkSnapshot, error) {
 	if runtime.GOOS == "darwin" {
 		return collectDarwinNetworkSnapshot()
@@ -107,32 +116,30 @@ func collectNetworkSnapshot() (networkSnapshot, error) {
 	baseCtx := context.Background()
 
 	var (
-		basicRaw         string
-		ipv4State        netshInterfaceState
-		ipv6State        netshInterfaceState
-		ipv4Configs      []netshIPConfig
-		ipv4DefaultRoute string
-		ipv6DefaultRoute string
-		dnsIPv4          []netshDNSEntry
-		dnsIPv6          []netshDNSEntry
-		warpStatus       warpSnapshot
-		warpSettings     warpSettingsSnapshot
-		tcpProbe         tcpProbeSnapshot
+		metas        []adapterMeta
+		metaErr      error
+		ipv4State    netshInterfaceState
+		ipv6State    netshInterfaceState
+		ipv4Route    netshDefaultRoute
+		ipv6Route    netshDefaultRoute
+		dnsIPv4      []netshDNSEntry
+		dnsIPv6      []netshDNSEntry
+		warpStatus   warpSnapshot
+		warpSettings warpSettingsSnapshot
+		tcpProbe     tcpProbeSnapshot
 	)
 
 	// Phase 1: queries that do not depend on each other.
 	var wg sync.WaitGroup
-	wg.Add(9)
-	// PowerShell: Get-NetAdapter (needed for MAC address and description)
+	wg.Add(8)
+	// Adapter metadata (name, MAC, description) is served from a cache and
+	// refreshed in the background, so a snapshot no longer blocks on the
+	// external adapter query every time.
 	go func() {
 		defer wg.Done()
-		ctx, cancel := context.WithTimeout(baseCtx, timeoutShort)
-		defer cancel()
-		basicCmd := "Get-NetAdapter | Select-Object Name, Status, MacAddress, InterfaceDescription | ConvertTo-Json -Compress"
-		var err error
-		basicRaw, err = execWithTimeout(ctx, "powershell", "-NoProfile", "-NonInteractive", "-Command", basicCmd)
-		if err != nil {
-			log.Printf("snapshot: Get-NetAdapter failed: %v", err)
+		metas, metaErr = adapterMetadataList(baseCtx)
+		if metaErr != nil {
+			log.Printf("snapshot: adapter metadata failed: %v", metaErr)
 		}
 	}()
 	// netsh: interface list for both families. The same output also provides the
@@ -155,17 +162,6 @@ func collectNetworkSnapshot() (networkSnapshot, error) {
 		ipv6State, err = netshGetInterfaces(ctx, "ipv6")
 		if err != nil {
 			log.Printf("snapshot: netsh IPv6 interface list failed: %v", err)
-		}
-	}()
-	// netsh: IPv4 config (gateway)
-	go func() {
-		defer wg.Done()
-		ctx, cancel := context.WithTimeout(baseCtx, timeoutShort)
-		defer cancel()
-		var err error
-		ipv4Configs, err = netshGetIPv4Config(ctx)
-		if err != nil {
-			log.Printf("snapshot: netsh IPv4 config failed: %v", err)
 		}
 	}()
 	// netsh: DNS servers (IPv4 + IPv6)
@@ -208,7 +204,7 @@ func collectNetworkSnapshot() (networkSnapshot, error) {
 		defer wg.Done()
 		ctx, cancel := context.WithTimeout(baseCtx, timeoutShort)
 		defer cancel()
-		tcpProbe = probeCloudflareTCP(ctx)
+		tcpProbe = cachedCloudflareTCP(ctx)
 	}()
 	wg.Wait()
 
@@ -221,7 +217,7 @@ func collectNetworkSnapshot() (networkSnapshot, error) {
 		ctx, cancel := context.WithTimeout(baseCtx, timeoutShort)
 		defer cancel()
 		var err error
-		ipv4DefaultRoute, err = netshGetIPv4DefaultRoute(ctx, ipv4State.Index)
+		ipv4Route, err = netshGetDefaultRoute(ctx, "ipv4", "0.0.0.0/0", ipv4State.Index)
 		if err != nil {
 			log.Printf("snapshot: netsh IPv4 route failed: %v", err)
 		}
@@ -231,36 +227,26 @@ func collectNetworkSnapshot() (networkSnapshot, error) {
 		ctx, cancel := context.WithTimeout(baseCtx, timeoutShort)
 		defer cancel()
 		var err error
-		ipv6DefaultRoute, err = netshGetIPv6DefaultRoute(ctx, ipv6State.Index)
+		ipv6Route, err = netshGetDefaultRoute(ctx, "ipv6", "::/0", ipv6State.Index)
 		if err != nil {
 			log.Printf("snapshot: netsh IPv6 route failed: %v", err)
 		}
 	}()
 	routeWG.Wait()
 
-	basics, basicsErr := decodeJSONList[adapterBasic](basicRaw)
-
-	if (basicsErr != nil || len(basics) == 0) && basicRaw == "" {
-		retryCtx, retryCancel := context.WithTimeout(baseCtx, timeoutShort)
-		defer retryCancel()
-		var retryErr error
-		basicRaw, retryErr = execWithTimeout(retryCtx, "powershell", "-NoProfile", "-NonInteractive", "-Command",
-			"Get-NetAdapter | Select-Object Name, Status, MacAddress, InterfaceDescription | ConvertTo-Json -Compress")
-		if retryErr != nil {
-			log.Printf("snapshot: retry Get-NetAdapter failed: %v", retryErr)
-		}
-		basics, basicsErr = decodeJSONList[adapterBasic](basicRaw)
-	}
-
-	if basicsErr != nil || len(basics) == 0 {
+	if len(metas) == 0 {
 		return networkSnapshot{
 			CollectedAt:  time.Now().Format(time.RFC3339),
 			Warp:         warpStatus,
 			WarpSettings: warpSettings,
-		}, fmt.Errorf("adapter list unavailable: %w", basicsErr)
+		}, fmt.Errorf("adapter list unavailable: %w", metaErr)
 	}
 
-	// Build lookup maps from netsh results
+	// Adapters netsh knows about but the cached metadata does not (plugged in
+	// after the last refresh) are added so they show up immediately.
+	basics := mergeAdapterMetadata(metas, ipv4State, ipv6State)
+
+	// Build address maps from the OS.
 	ipv4Map := make(map[string][]string)
 	ipv6Map := make(map[string][]string)
 	ifs, err := net.Interfaces()
@@ -284,7 +270,7 @@ func collectNetworkSnapshot() (networkSnapshot, error) {
 		}
 	}
 
-	// Build binding map from netsh results
+	// Binding state per family.
 	bindingMap := make(map[string]map[string]bool)
 	for name, enabled := range ipv4State.Connected {
 		if bindingMap[name] == nil {
@@ -299,87 +285,53 @@ func collectNetworkSnapshot() (networkSnapshot, error) {
 		bindingMap[name]["ms_tcpip6"] = enabled
 	}
 
-	// Build IP config map from netsh results
-	ipCfgMap := make(map[string]netshIPConfig)
-	for _, cfg := range ipv4Configs {
-		if strings.TrimSpace(cfg.Name) == "" {
-			continue
-		}
-		ipCfgMap[cfg.Name] = cfg
+	// Gateways come from the default routes of both families.
+	gateways := make(map[string]adapterGateway)
+	if name := ipv4Route.Interface; name != "" {
+		entry := gateways[name]
+		entry.IPv4 = ipv4Route.Gateway
+		gateways[name] = entry
 	}
-	// Add IPv6 gateway from route table (ipv6DefaultRoute is the interface name with default route)
-	if ipv6DefaultRoute != "" {
-		if cfg, ok := ipCfgMap[ipv6DefaultRoute]; ok {
-			// IPv6 gateway is the link-local gateway from the route table
-			// We'll leave it empty for now since netsh doesn't easily provide this
-			ipCfgMap[ipv6DefaultRoute] = cfg
-		}
+	if name := ipv6Route.Interface; name != "" {
+		entry := gateways[name]
+		entry.IPv6 = ipv6Route.Gateway
+		gateways[name] = entry
 	}
 
-	// Build DNS map from netsh results
 	dnsMap := make(map[string][]string)
 	for _, entry := range dnsIPv4 {
-		alias := strings.TrimSpace(entry.Name)
-		if alias == "" || len(entry.Servers) == 0 {
-			continue
-		}
-		existing := make(map[string]struct{}, len(dnsMap[alias]))
-		for _, s := range dnsMap[alias] {
-			existing[s] = struct{}{}
-		}
-		for _, s := range entry.Servers {
-			if _, ok := existing[s]; ok {
-				continue
-			}
-			dnsMap[alias] = append(dnsMap[alias], s)
-			existing[s] = struct{}{}
+		name := strings.TrimSpace(entry.Name)
+		if name != "" {
+			dnsMap[name] = mergeUniqueStrings(dnsMap[name], entry.Servers)
 		}
 	}
 	for _, entry := range dnsIPv6 {
-		alias := strings.TrimSpace(entry.Name)
-		if alias == "" || len(entry.Servers) == 0 {
-			continue
-		}
-		existing := make(map[string]struct{}, len(dnsMap[alias]))
-		for _, s := range dnsMap[alias] {
-			existing[s] = struct{}{}
-		}
-		for _, s := range entry.Servers {
-			if _, ok := existing[s]; ok {
-				continue
-			}
-			dnsMap[alias] = append(dnsMap[alias], s)
-			existing[s] = struct{}{}
+		name := strings.TrimSpace(entry.Name)
+		if name != "" {
+			dnsMap[name] = mergeUniqueStrings(dnsMap[name], entry.Servers)
 		}
 	}
 
-	// Determine selected adapters
 	basicNameSet := make(map[string]struct{}, len(basics))
 	for _, b := range basics {
 		basicNameSet[b.Name] = struct{}{}
 	}
 
 	selected := make(map[string]struct{})
-	// Select adapters with default routes (already resolved to interface names by netsh)
-	if ipv4DefaultRoute != "" {
-		if _, ok := basicNameSet[ipv4DefaultRoute]; ok {
-			selected[ipv4DefaultRoute] = struct{}{}
-		}
-	}
-	if ipv6DefaultRoute != "" {
-		if _, ok := basicNameSet[ipv6DefaultRoute]; ok {
-			selected[ipv6DefaultRoute] = struct{}{}
-		}
-	}
-	// Select adapters that are UP and have a gateway
-	for _, b := range basics {
-		cfg, ok := ipCfgMap[b.Name]
-		if !ok {
+	// Adapters that own a default route.
+	for _, name := range []string{ipv4Route.Interface, ipv6Route.Interface} {
+		if name == "" {
 			continue
 		}
-		statusUp := strings.EqualFold(strings.TrimSpace(b.Status), "up")
-		hasGateway := strings.TrimSpace(cfg.IPv4Gateway) != "" || strings.TrimSpace(cfg.IPv6Gateway) != ""
-		if statusUp && hasGateway {
+		if _, ok := basicNameSet[name]; ok {
+			selected[name] = struct{}{}
+		}
+	}
+	// Adapters that are UP and have a gateway.
+	for _, b := range basics {
+		gateway := gateways[b.Name]
+		statusUp := strings.EqualFold(strings.TrimSpace(deriveAdapterStatus(b, ipv4State, ipv6State)), "up")
+		if statusUp && (gateway.IPv4 != "" || gateway.IPv6 != "") {
 			selected[b.Name] = struct{}{}
 		}
 	}
@@ -401,7 +353,7 @@ func collectNetworkSnapshot() (networkSnapshot, error) {
 			continue
 		}
 		adapterBindings := bindingMap[b.Name]
-		cfg := ipCfgMap[b.Name]
+		gateway := gateways[b.Name]
 		ipv4 := ipv4Map[b.Name]
 		ipv6 := ipv6Map[b.Name]
 		dns := dnsMap[b.Name]
@@ -411,16 +363,19 @@ func collectNetworkSnapshot() (networkSnapshot, error) {
 		if ipv6 == nil {
 			ipv6 = []string{}
 		}
+		if dns == nil {
+			dns = []string{}
+		}
 		adapters = append(adapters, adapterSnapshot{
 			Name:        b.Name,
-			Status:      b.Status,
-			Description: b.InterfaceDescription,
+			Status:      deriveAdapterStatus(b, ipv4State, ipv6State),
+			Description: b.Description,
 			MacAddress:  b.MacAddress,
 			IPv4Enabled: adapterBindings["ms_tcpip"],
 			IPv6Enabled: adapterBindings["ms_tcpip6"],
 			FreeFlow:    false,
-			IPv4Gateway: strings.TrimSpace(cfg.IPv4Gateway),
-			IPv6Gateway: strings.TrimSpace(cfg.IPv6Gateway),
+			IPv4Gateway: gateway.IPv4,
+			IPv6Gateway: gateway.IPv6,
 			DNS:         dns,
 			IPv4:        ipv4,
 			IPv6:        ipv6,
@@ -448,6 +403,39 @@ func collectNetworkSnapshot() (networkSnapshot, error) {
 	}, nil
 }
 
+// mergeUniqueStrings appends the values of extra that are not in base yet,
+// keeping the original order (IPv4 servers before IPv6 servers).
+func mergeUniqueStrings(base, extra []string) []string {
+	if len(extra) == 0 {
+		return base
+	}
+	seen := make(map[string]struct{}, len(base)+len(extra))
+	out := make([]string, 0, len(base)+len(extra))
+	for _, value := range base {
+		value = strings.TrimSpace(value)
+		if value == "" {
+			continue
+		}
+		if _, ok := seen[value]; ok {
+			continue
+		}
+		seen[value] = struct{}{}
+		out = append(out, value)
+	}
+	for _, value := range extra {
+		value = strings.TrimSpace(value)
+		if value == "" {
+			continue
+		}
+		if _, ok := seen[value]; ok {
+			continue
+		}
+		seen[value] = struct{}{}
+		out = append(out, value)
+	}
+	return out
+}
+
 func hasOnlineAdapter(adapters []adapterSnapshot) bool {
 	for _, adapter := range adapters {
 		if !strings.EqualFold(strings.TrimSpace(adapter.Status), "up") {
@@ -461,6 +449,46 @@ func hasOnlineAdapter(adapters []adapterSnapshot) bool {
 		}
 	}
 	return false
+}
+
+const (
+	// tcpProbeSuccessTTL and tcpProbeFailureTTL keep the outbound probe off the
+	// snapshot path. Every collection used to dial cloudflare.com:443 and wait
+	// for the 1.2s dial timeout when the network blocks it, which made a warm
+	// snapshot take 1.3s even after the adapter query had been cached.
+	tcpProbeSuccessTTL = 30 * time.Second
+	tcpProbeFailureTTL = 10 * time.Second
+)
+
+var (
+	tcpProbeMu   sync.Mutex
+	tcpProbeLast tcpProbeSnapshot
+	tcpProbeAt   time.Time
+)
+
+// cachedCloudflareTCP returns the last probe result while it is recent enough,
+// so the snapshot does not block on an outbound dial every few seconds.
+func cachedCloudflareTCP(ctx context.Context) tcpProbeSnapshot {
+	tcpProbeMu.Lock()
+	last, at := tcpProbeLast, tcpProbeAt
+	tcpProbeMu.Unlock()
+
+	if !at.IsZero() {
+		ttl := tcpProbeSuccessTTL
+		if !last.OK {
+			ttl = tcpProbeFailureTTL
+		}
+		if time.Since(at) < ttl {
+			return last
+		}
+	}
+
+	result := probeCloudflareTCP(ctx)
+
+	tcpProbeMu.Lock()
+	tcpProbeLast, tcpProbeAt = result, time.Now()
+	tcpProbeMu.Unlock()
+	return result
 }
 
 func probeCloudflareTCP(ctx context.Context) tcpProbeSnapshot {
