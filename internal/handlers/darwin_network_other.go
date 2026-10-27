@@ -10,10 +10,6 @@ func applyDarwinNetworkMode(string, string) (string, error) {
 	return "", errDarwinOnly
 }
 
-func getDarwinIPv6State(string) (bool, error) {
-	return false, errDarwinOnly
-}
-
 func getDarwinAdapterDnsServers(string) ([]string, error) {
 	return nil, errDarwinOnly
 }
