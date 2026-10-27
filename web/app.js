@@ -702,10 +702,6 @@ function getDns64Backup(adapter) {
   return ipv6.filter(server => !DNS64_CANDIDATES.includes(server));
 }
 
-async function postActionWithRollback(path, body) {
-  return postActionSilently(path, body);
-}
-
 function getSelectedAdapter(network) {
   const ifName = currentIfName();
   return Array.isArray(network?.adapters)
@@ -872,13 +868,13 @@ async function applyDns64Mode(enabled) {
     if (enabled) {
       const resolver = pickDns64Resolver();
       await postActionSilently('/api/v1/switch', { ifName: adapter.name, mode: 'ipv6' });
-      await postActionWithRollback('/api/v1/dns', { ifName: adapter.name, ipv6Servers: [resolver] });
+      await postActionSilently('/api/v1/dns', { ifName: adapter.name, ipv6Servers: [resolver] });
       setDns64ModeStatus('当前：DNS64 已启用');
     } else {
       const restoreServers = recordedBackup;
       await postActionSilently('/api/v1/switch', { ifName: adapter.name, mode: 'both' });
       if (restoreServers.length > 0) {
-        await postActionWithRollback('/api/v1/dns', { ifName: adapter.name, ipv6Servers: restoreServers });
+        await postActionSilently('/api/v1/dns', { ifName: adapter.name, ipv6Servers: restoreServers });
       } else {
         // 没有备份时宁可保持现状，也不要硬写成某个公共 DNS
         appendLog('未记录原始 IPv6 DNS，关闭 DNS64 时保留当前 DNS 设置');
@@ -1732,7 +1728,7 @@ function connectWS() {
   ws.addEventListener('message', (event) => {
     try {
       const data = JSON.parse(event.data);
-      setBackendBadge(data.type === 'heartbeat' || data.type === 'hello' || data.type === 'network.status' ? 'ok' : (data.type === 'error' ? 'err' : 'ok'));
+      setBackendBadge(data.type === 'error' ? 'err' : 'ok');
       if (data.type === 'network.status') {
         if (Date.now() - lastSwitchTime < 3000) {
           return;
@@ -1768,9 +1764,6 @@ function connectWS() {
           setText(easyModeStateEl, '当前关闭');
           showConfigurationSuccess();
         }
-        return;
-      }
-      if (data.type === 'heartbeat') {
         return;
       }
       if (data.type === 'hello') {

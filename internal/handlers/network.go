@@ -195,32 +195,3 @@ func applyNetworkMode(ifName, mode string) (*switchResult, string, error) {
 	}
 	return result, out, fmt.Errorf("switch failed: %w: %s", runErr, strings.TrimSpace(out))
 }
-
-// getIPv6AdminState is kept for the advanced view: it reports whether IPv6 is
-// administratively connected on the adapter.
-func getIPv6AdminState(ifName string) (bool, error) {
-	if runtime.GOOS == "darwin" {
-		return getDarwinIPv6State(ifName)
-	}
-	ctx, cancel := context.WithTimeout(context.Background(), timeoutShort)
-	defer cancel()
-
-	raw, err := execWithTimeout(ctx, "netsh", "interface", "ipv6", "show", "interface")
-	if err != nil && raw == "" {
-		return false, err
-	}
-	// Parse netsh output to find the adapter and its state
-	for _, line := range strings.Split(raw, "\n") {
-		fields := strings.Fields(strings.TrimSpace(line))
-		if len(fields) < 5 {
-			continue
-		}
-		name := strings.Join(fields[4:], " ")
-		if !strings.EqualFold(name, ifName) {
-			continue
-		}
-		state := strings.ToLower(fields[3])
-		return state == "connected", nil
-	}
-	return false, errors.New("adapter not found")
-}

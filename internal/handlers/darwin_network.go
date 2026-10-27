@@ -30,24 +30,6 @@ func applyDarwinNetworkMode(serviceName, mode string) (string, error) {
 	return out, runErr
 }
 
-func getDarwinIPv6State(serviceName string) (bool, error) {
-	ctx, cancel := context.WithTimeout(context.Background(), timeoutShort)
-	defer cancel()
-	raw, err := execWithTimeout(ctx, networkSetupPath, "-getinfo", serviceName)
-	if err != nil {
-		return false, err
-	}
-	for _, line := range strings.Split(raw, "\n") {
-		key, value, ok := strings.Cut(line, ":")
-		if !ok || !strings.EqualFold(strings.TrimSpace(key), "IPv6 IP address") {
-			continue
-		}
-		value = strings.TrimSpace(value)
-		return value != "" && !strings.EqualFold(value, "none"), nil
-	}
-	return false, nil
-}
-
 func getDarwinAdapterDnsServers(serviceName string) ([]string, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), timeoutShort)
 	defer cancel()
