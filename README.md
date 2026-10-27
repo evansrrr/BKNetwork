@@ -113,28 +113,26 @@ pipx install pre-commit
 pre-commit install
 ```
 
-**仅构建 Go 入口**
+**仅构建 Go 后端（服务 / 控制台模式）**
+
+桌面界面与托盘由 Tauri 应用提供，`cmd/bknetwork` 只包含无界面的后端：
 
 ```bash
 cd BKNetwork
 go build -o bknetwork.exe ./cmd/bknetwork
 ```
 
-旧版入口仍保留给服务模式和排障。常规桌面分发请使用上面的 Tauri 构建。
-
-如果要连同最新前端一起发布，请使用仓库里的发布脚本，它会先同步 `web/` 再构建可分发目录和 zip 压缩包：
+它不会打开浏览器，也没有托盘图标，适合作为 Windows 服务运行或在前台排障：
 
 ```bash
-cd BKNetwork
-.\scripts\build-release.ps1
-```
+# 前台运行并输出日志（Ctrl+C 退出）
+.\bknetwork.exe run
 
-`release/` 目录里会包含 `bknetwork.exe` 和最新的 `web/`，程序运行时会自动加载同步后的前端页面
-
-```bash
 # 在 Linux/macOS 环境交叉编译为 Windows amd64
 GOOS=windows GOARCH=amd64 go build -o bknetwork.exe ./cmd/bknetwork
 ```
+
+不带参数运行时会作为 Windows 服务启动（由服务管理器拉起）；需要界面请使用上面的 Tauri 构建。
 
 **以服务方式安装（Windows）**
 
@@ -148,20 +146,39 @@ GOOS=windows GOARCH=amd64 go build -o bknetwork.exe ./cmd/bknetwork
 
 **常见问题与排查**
 
-- 首次打开页面状态加载慢：服务在采集网络快照时会调用若干 PowerShell 和外部命令（如 `warp-cli`），可能耗时。建议在疑难排查时直接在服务器主机上运行 `go run ./cmd/bknetwork` 并观察输出日志
+- 首次打开页面状态加载慢：采集网络快照需要调用若干 `netsh` 命令，首次约 2 秒，之后有 5 秒缓存；网卡名称、MAC、描述等信息缓存 60 秒并在后台刷新。疑难排查时可先看日志文件里的时序，或直接运行 `go run ./cmd/bknetwork run` 观察标准输出
 - `warp-cli not found`：如果未安装 Cloudflare WARP 客户端，`/api/v1/warp` 会返回错误并在日志中给出提示。安装后确保 `warp-cli` 在 PATH 中可访问
 - 权限不足：修改网卡绑定等操作需要管理员权限，若在非管理员上下文运行会收到 403 或相应错误信息
+- 校园网/受限网络下不想让程序联网：设置里打开「关闭联网检查」，版本检查与公网 IPv6 探测都会停止；IPv6 检测优先使用本机已有地址，不再依赖外部回显服务
 
-**单元测试**
+**日志与诊断**
+
+打包版没有控制台，所有输出都会写入按天切分的日志文件：
+
+- Windows：`%LOCALAPPDATA%\BKNetwork\logs\bknetwork-YYYYMMDD.log`（单文件超过 2 MiB 时轮转为 `.log.1`）
+- macOS：`~/Library/Caches/BKNetwork/logs/`（同样的文件名规则）
+- 每写入一次 IP 栈切换、DNS 修改、设置修改、WARP 操作都会记录一行 `AUDIT action=...`，并带上本次请求的 `requestId`（同时出现在响应的 `X-Request-Id` 头里），报障时提供这个 id 即可定位对应日志
+- 设置面板里的「导出诊断信息」会下载一份 JSON：版本、系统、日志尾部 300 行、当前设置与网络快照；也可以直接访问 `GET /api/v1/diagnostics`
+
+**单元测试与检查**
 
 ```bash
 cd BKNetwork
-go test ./...
+go test ./...                       # 全部测试（无需管理员权限）
+go vet ./...                        # 静态检查
+node scripts/check-frontend.mjs     # 前端语法、CSP 内联限制、元素 id 一致性
 ```
 
 **GitHub CI/CD**
 
-- `.github/workflows/ci.yml`：在 push/PR 上校验 Go 格式、运行 Go 测试、Vet、Rustfmt 和 Clippy，并校验 Windows x64 与 macOS Apple Silicon sidecar。
+- `.github/workflows/ci.yml`：
+  - `go`（linux）：gofmt 等价比对、`go vet`、`go test -race`、覆盖率（下限 35%）、构建
+  - `go-windows`：完整测试与构建（大部分逻辑是 Windows 专属，只有这个 job 会真正编译它们），并以 `CGO_ENABLED=0` 构建两个可执行文件
+  - `frontend`：`scripts/check-frontend.mjs`
+  - `static-analysis` / `vulnerabilities`：staticcheck 与 govulncheck，目前为 advisory（首次变绿后改为阻塞）
+  - `tauri`：Rustfmt、Clippy 与两侧 sidecar 构建
+- `.github/dependabot.yml`：Go 模块与 Rust 依赖按周、Actions 按月分组提 PR
+- `.pre-commit-config.yaml`：gofmt、`go vet`、前端检查
 - `.github/workflows/release.yml`：推送与 Cargo 版本一致的 `vX.Y.Z` 标签后，自动创建 GitHub Release，发布 Windows x64 NSIS、macOS Apple Silicon DMG 和 macOS Intel DMG。
 
 ```bash

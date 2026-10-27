@@ -75,6 +75,20 @@
             <span class="toggle-track" aria-hidden="true"></span>
           </span>
         </div>
+        <div class="setting-row">
+          <div class="setting-copy">
+            <div class="setting-title">关闭联网检查</div>
+            <div class="setting-note">不再检查新版本、也不做公网 IPv6 探测（校园网受限时打开）</div>
+          </div>
+          <span class="toggle">
+            <input id="settingDisableOnlineChecks" type="checkbox" />
+            <span class="toggle-track" aria-hidden="true"></span>
+          </span>
+        </div>
+        <div class="settings-actions">
+          <button class="settings-action" id="settingsDiagnosticsBtn" type="button">导出诊断信息</button>
+          <span class="settings-action-note">包含版本、日志尾部与当前网络状态</span>
+        </div>
         <div class="settings-status" id="settingsStatus">未加载</div>
       </div>
     </div>
@@ -191,15 +205,15 @@
             <div class="control-card">
               <div class="control-label">切换 ip 栈协议</div>
               <div class="mode-select" role="radiogroup" aria-label="网络模式选择">
-                <button id="btnIpv4" class="mode-option" type="button" onclick="switchStack('ipv4').catch(() => {})" aria-pressed="false">
+                <button id="btnIpv4" class="mode-option" type="button" data-switch-mode="ipv4" aria-pressed="false">
                   <span class="mode-dot" aria-hidden="true"></span>
                   <span>仅 v4</span>
                 </button>
-                <button id="btnIpv6" class="mode-option" type="button" onclick="switchStack('ipv6').catch(() => {})" aria-pressed="false">
+                <button id="btnIpv6" class="mode-option" type="button" data-switch-mode="ipv6" aria-pressed="false">
                   <span class="mode-dot" aria-hidden="true"></span>
                   <span>仅 v6</span>
                 </button>
-                <button id="btnBoth" class="mode-option" type="button" onclick="switchStack('both').catch(() => {})" aria-pressed="false">
+                <button id="btnBoth" class="mode-option" type="button" data-switch-mode="both" aria-pressed="false">
                   <span class="mode-dot" aria-hidden="true"></span>
                   <span>双栈</span>
                 </button>
@@ -218,6 +232,7 @@
                   <input id="dnsIpv6Input" class="dns-input" type="text" autocomplete="off" spellcheck="false" placeholder="例如 2400:3200::1" />
                 </label>
               </div>
+              <div class="dns-status" id="dnsStatus"></div>
             </div>
           </div>
         </div>
@@ -260,7 +275,7 @@
         </div>
       </section>
 
-      <section class="section" style="margin-top:16px;">
+      <section class="section section--spaced">
         <div class="section-head">
           <div>
             <h2>网卡</h2>
@@ -270,7 +285,7 @@
         <div class="adapter-list" id="adapterList"></div>
       </section>
 
-      <section class="section" style="margin-top:12px;">
+      <section class="section section--spaced-sm">
         <div class="section-head">
           <div>
             <h2>日志</h2>

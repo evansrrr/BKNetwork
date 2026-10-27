@@ -9,11 +9,13 @@ import (
 	"time"
 )
 
+// escapePowerShellSingleQuotedString escapes a value that is embedded in a
+// single-quoted string. Inside single quotes only the quote character is
+// special: backticks and $ are literal, so prefixing them with a backtick (as
+// this used to do) changed the value instead of escaping it, and an adapter
+// named e.g. "IPv6$" could no longer be found.
 func escapePowerShellSingleQuotedString(value string) string {
-	value = strings.ReplaceAll(value, "`", "``")
-	value = strings.ReplaceAll(value, "$", "`$")
-	value = strings.ReplaceAll(value, "'", "''")
-	return value
+	return strings.ReplaceAll(value, "'", "''")
 }
 
 func joinPowerShellStringArray(values []string) string {
@@ -51,6 +53,18 @@ func normalizeDnsServerList(values []string) ([]string, error) {
 	return servers, nil
 }
 
+// describeDnsServers renders a requested DNS list for the audit log. A nil
+// pointer means the family was not part of the request and stays untouched.
+func describeDnsServers(servers *[]string) string {
+	if servers == nil {
+		return "unchanged"
+	}
+	if len(*servers) == 0 {
+		return "empty"
+	}
+	return strings.Join(*servers, ",")
+}
+
 func splitDnsServersByFamily(values []string) ([]string, []string) {
 	ipv4 := make([]string, 0, len(values))
 	ipv6 := make([]string, 0, len(values))
@@ -68,42 +82,77 @@ func splitDnsServersByFamily(values []string) ([]string, []string) {
 	return ipv4, ipv6
 }
 
-func getAdapterDnsServers(ifName string) ([]string, error) {
+// getAdapterDnsServers returns the DNS servers configured on the adapter,
+// split by address family. Both families are always queried: callers merge the
+// returned lists back into a single Set-DnsClientServerAddress call, so
+// stopping at the first matching family would silently drop the other one.
+func getAdapterDnsServers(ifName string) ([]string, []string, error) {
 	if runtime.GOOS == "darwin" {
-		return getDarwinAdapterDnsServers(ifName)
+		servers, err := getDarwinAdapterDnsServers(ifName)
+		if err != nil {
+			return nil, nil, err
+		}
+		ipv4, ipv6 := splitDnsServersByFamily(servers)
+		return ipv4, ipv6, nil
 	}
+
+	// Each query gets its own deadline: sharing one context across both calls
+	// meant a slow IPv4 lookup consumed the budget and the IPv6 lookup failed
+	// with a deadline error, silently dropping that family.
+	entriesIPv4, errIPv4 := netshDNSServersWithTimeout("ipv4")
+	entriesIPv6, errIPv6 := netshDNSServersWithTimeout("ipv6")
+
+	var (
+		ipv4     []string
+		ipv6     []string
+		found    bool
+		firstErr = errIPv4
+	)
+	if firstErr == nil {
+		firstErr = errIPv6
+	}
+	for _, entry := range entriesIPv4 {
+		if strings.EqualFold(strings.TrimSpace(entry.Name), ifName) {
+			ipv4, _ = splitDnsServersByFamily(entry.Servers)
+			found = true
+			break
+		}
+	}
+	for _, entry := range entriesIPv6 {
+		if strings.EqualFold(strings.TrimSpace(entry.Name), ifName) {
+			_, ipv6 = splitDnsServersByFamily(entry.Servers)
+			found = true
+			break
+		}
+	}
+	if found || firstErr == nil {
+		return ipv4, ipv6, nil
+	}
+
+	// Both netsh queries failed; fall back to PowerShell.
+	return getAdapterDnsServersViaPowerShell(ifName)
+}
+
+// netshDNSServersWithTimeout runs one "show dnsservers" query with its own
+// deadline, so a slow lookup for one family cannot starve the other.
+func netshDNSServersWithTimeout(family string) ([]netshDNSEntry, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), timeoutShort)
 	defer cancel()
+	return netshGetDNSServers(ctx, family)
+}
 
-	// Try IPv4 DNS first
-	entries, err := netshGetDNSServers(ctx, "ipv4")
-	if err == nil {
-		for _, entry := range entries {
-			if strings.EqualFold(strings.TrimSpace(entry.Name), ifName) {
-				return entry.Servers, nil
-			}
-		}
-	}
+func getAdapterDnsServersViaPowerShell(ifName string) ([]string, []string, error) {
+	ctx, cancel := context.WithTimeout(context.Background(), timeoutMedium)
+	defer cancel()
 
-	// Try IPv6 DNS
-	entries, err = netshGetDNSServers(ctx, "ipv6")
-	if err == nil {
-		for _, entry := range entries {
-			if strings.EqualFold(strings.TrimSpace(entry.Name), ifName) {
-				return entry.Servers, nil
-			}
-		}
-	}
-
-	// Fallback to PowerShell if netsh fails
 	psCmd := fmt.Sprintf("Get-DnsClientServerAddress | Where-Object { $_.InterfaceAlias -eq '%s' } | Select-Object InterfaceAlias, ServerAddresses | ConvertTo-Json -Compress", escapePowerShellSingleQuotedString(ifName))
 	raw, psErr := execWithTimeout(ctx, "powershell", "-NoProfile", "-NonInteractive", "-Command", psCmd)
 	if psErr != nil && strings.TrimSpace(raw) == "" {
-		return nil, psErr
+		return nil, nil, psErr
 	}
 	dnsInfos, decodeErr := decodeJSONList[dnsInfo](raw)
 	if decodeErr != nil {
-		return nil, decodeErr
+		return nil, nil, decodeErr
 	}
 	servers := make([]string, 0)
 	seen := make(map[string]struct{})
@@ -116,7 +165,33 @@ func getAdapterDnsServers(ifName string) ([]string, error) {
 			servers = append(servers, server)
 		}
 	}
-	return servers, nil
+	ipv4, ipv6 := splitDnsServersByFamily(servers)
+	return ipv4, ipv6, nil
+}
+
+// planDNSServers merges the requested changes with the current configuration.
+// Families that were not part of the request keep their current servers; the
+// merged list is what gets written back to the adapter.
+func planDNSServers(currentIPv4, currentIPv6 []string, ipv4Servers, ipv6Servers *[]string) ([]string, error) {
+	nextIPv4 := append([]string(nil), currentIPv4...)
+	if ipv4Servers != nil {
+		normalized, err := normalizeDnsServerList(*ipv4Servers)
+		if err != nil {
+			return nil, err
+		}
+		nextIPv4 = normalized
+	}
+
+	nextIPv6 := append([]string(nil), currentIPv6...)
+	if ipv6Servers != nil {
+		normalized, err := normalizeDnsServerList(*ipv6Servers)
+		if err != nil {
+			return nil, err
+		}
+		nextIPv6 = normalized
+	}
+
+	return append(nextIPv4, nextIPv6...), nil
 }
 
 func setAdapterDnsServers(ifName string, servers []string) (string, error) {
@@ -137,28 +212,14 @@ func setAdapterDnsServers(ifName string, servers []string) (string, error) {
 }
 
 func applyDnsServers(ifName string, ipv4Servers, ipv6Servers *[]string) (string, error) {
-	currentServers, err := getAdapterDnsServers(ifName)
+	currentIPv4, currentIPv6, err := getAdapterDnsServers(ifName)
 	if err != nil {
 		return "", err
 	}
-	currentIPv4, currentIPv6 := splitDnsServersByFamily(currentServers)
 
-	nextIPv4 := currentIPv4
-	if ipv4Servers != nil {
-		nextIPv4, err = normalizeDnsServerList(*ipv4Servers)
-		if err != nil {
-			return "", err
-		}
+	combined, err := planDNSServers(currentIPv4, currentIPv6, ipv4Servers, ipv6Servers)
+	if err != nil {
+		return "", err
 	}
-
-	nextIPv6 := currentIPv6
-	if ipv6Servers != nil {
-		nextIPv6, err = normalizeDnsServerList(*ipv6Servers)
-		if err != nil {
-			return "", err
-		}
-	}
-
-	combined := append(append(make([]string, 0, len(nextIPv4)+len(nextIPv6)), nextIPv4...), nextIPv6...)
 	return setAdapterDnsServers(ifName, combined)
 }

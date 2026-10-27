@@ -7,34 +7,67 @@ import (
 	"syscall"
 
 	"bknetwork/internal/handlers"
+	"bknetwork/internal/logging"
 	"bknetwork/internal/server"
 	appsettings "bknetwork/internal/settings"
 )
 
 func main() {
+	// The packaged build is a GUI process: stderr goes nowhere, so every line
+	// has to reach the log file for a report to be diagnosable.
+	if path, logErr := logging.Setup(); logErr != nil {
+		log.Printf("file logging disabled: %v", logErr)
+	} else {
+		log.Printf("logging to %s", path)
+	}
+
 	cfg, err := appsettings.Load()
 	if err != nil {
 		log.Printf("failed to load settings: %v", err)
 	}
 
-	// Keep the existing scheduled task in sync, but point it at the Tauri
-	// executable supplied by the parent process instead of this sidecar.
-	if err := appsettings.ApplyStartupShortcut(cfg.AutoStart); err != nil {
-		log.Printf("failed to sync autostart setting: %v", err)
-	}
-
-	if cfg.WarpAutoStart {
-		go func() {
-			if err := handlers.StartWarp(); err != nil {
-				log.Printf("warp auto start failed: %v", err)
-			}
-		}()
-	}
-
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer stop()
 
-	if err := server.NewServer("").Start(ctx); err != nil {
+	srv := server.NewServer("")
+	serverDone := make(chan error, 1)
+	go func() { serverDone <- srv.Start(ctx) }()
+
+	// Wait for the listener before doing anything else: the desktop shell polls
+	// for this port, and the work below spawns helper processes (a hidden
+	// scheduled task update, warp-cli) that used to run first and delay the
+	// window by seconds.
+	select {
+	case <-srv.Ready():
+		go syncAutostart(cfg)
+		go startWarpIfEnabled(cfg)
+	case err := <-serverDone:
+		// A shutdown signal can arrive before the listener is up; that is a clean
+		// exit, not a fatal error.
+		if err != nil {
+			log.Fatal(err)
+		}
+		return
+	}
+
+	if err := <-serverDone; err != nil {
 		log.Fatal(err)
+	}
+}
+
+// syncAutostart keeps the scheduled task in sync, pointing it at the Tauri
+// executable supplied by the parent process rather than this sidecar.
+func syncAutostart(cfg appsettings.Settings) {
+	if err := appsettings.ApplyStartupShortcut(cfg.AutoStart); err != nil {
+		log.Printf("failed to sync autostart setting: %v", err)
+	}
+}
+
+func startWarpIfEnabled(cfg appsettings.Settings) {
+	if !cfg.WarpAutoStart {
+		return
+	}
+	if err := handlers.StartWarp(); err != nil {
+		log.Printf("warp auto start failed: %v", err)
 	}
 }

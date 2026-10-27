@@ -7,54 +7,63 @@ import (
 	"log"
 	"net/http"
 	"os/exec"
+	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"bknetwork/internal/buildinfo"
 	"bknetwork/internal/events"
-	appsettings "bknetwork/internal/settings"
 
 	"github.com/gorilla/websocket"
 )
 
-var upgrader = websocket.Upgrader{
-	CheckOrigin: func(r *http.Request) bool {
-		origin := r.Header.Get("Origin")
-		if origin == "" {
-			return true
-		}
-		return origin == "http://localhost:13335" || origin == "http://127.0.0.1:13335"
-	},
+// newWSUpgrader accepts the origins the server actually listens on. It used to
+// be a package level upgrader with a hard coded ":13335", so a different listen
+// port rejected every browser handshake; an empty Origin (non-browser client) is
+// still allowed, and the guard rejects non-loopback hosts independently.
+func newWSUpgrader(allowedOrigins []string) websocket.Upgrader {
+	allowed := make(map[string]struct{}, len(allowedOrigins))
+	for _, origin := range allowedOrigins {
+		allowed[origin] = struct{}{}
+	}
+	return websocket.Upgrader{
+		CheckOrigin: func(r *http.Request) bool {
+			origin := r.Header.Get("Origin")
+			if origin == "" {
+				return true
+			}
+			_, ok := allowed[origin]
+			return ok
+		},
+	}
 }
 
 const (
-	timeoutDial   = 3 * time.Second
+	// timeoutDial bounds the connectivity probe inside the network snapshot.
+	// Every request used to wait for the slowest sub-probe, so a blocked
+	// cloudflare.com:443 dial cost the whole dashboard ~3s on first load.
+	timeoutDial   = 1200 * time.Millisecond
 	timeoutShort  = 5 * time.Second
 	timeoutMedium = 8 * time.Second
 	timeoutApply  = 12 * time.Second
 	timeoutLong   = 15 * time.Second
 )
 
-type apiResponse struct {
-	OK      bool        `json:"ok"`
-	Error   string      `json:"error,omitempty"`
-	Detail  string      `json:"detail,omitempty"`
-	Output  string      `json:"output,omitempty"`
-	Payload interface{} `json:"payload,omitempty"`
-}
-
-type settingsSnapshot struct {
-	AutoStart        bool `json:"autoStart"`
-	SilentStart      bool `json:"silentStart"`
-	WarpAutoStart    bool `json:"warpAutoStart"`
-	WarpAppAutoStart bool `json:"warpAppAutoStart"`
-}
-
 func writeJSON(w http.ResponseWriter, v interface{}, code int) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(code)
 	if err := json.NewEncoder(w).Encode(v); err != nil {
 		log.Printf("json encode error: %v", err)
+	}
+}
+
+// NotFoundHandler answers unknown API paths with JSON. Without it the catch-all
+// static handler returned index.html with status 200, which made a typo in an
+// API path look like a success.
+func NotFoundHandler() http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		writeJSON(w, map[string]string{"error": "not found", "path": r.URL.Path}, http.StatusNotFound)
 	}
 }
 
@@ -131,28 +140,72 @@ func SwitchStackHandler(hub *events.Hub) http.HandlerFunc {
 			return
 		}
 
-		out, err := applyNetworkMode(payload.IfName, payload.Mode)
+		switchRes, out, err := applyNetworkMode(payload.IfName, payload.Mode)
+		// The bindings changed (or were rolled back), so the cached snapshot is
+		// stale for the status poll that follows this request.
+		invalidateNetworkSnapshot()
 		if err != nil {
+			status := http.StatusInternalServerError
+			if errors.Is(err, errAdapterNotFound) || errors.Is(err, errUnknownMode) {
+				status = http.StatusBadRequest
+			}
 			result := map[string]interface{}{
 				"error":  "command failed",
 				"detail": err.Error(),
 				"output": out,
 			}
-			writeJSON(w, result, http.StatusInternalServerError)
+			rolledBack := false
+			code := ""
+			if switchRes != nil {
+				rolledBack = switchRes.RolledBack
+				code = switchRes.Code
+				result["code"] = switchRes.Code
+				result["was"] = switchRes.Was
+				result["now"] = switchRes.Now
+				result["rolledBack"] = switchRes.RolledBack
+			}
+			audit(r, "switch", map[string]string{
+				"ifName":     payload.IfName,
+				"mode":       payload.Mode,
+				"ok":         "false",
+				"code":       code,
+				"rolledBack": strconv.FormatBool(rolledBack),
+				"detail":     err.Error(),
+			})
+			writeJSON(w, result, status)
 			notify(hub, "switch.error", "failed to switch network stack", map[string]interface{}{
-				"request": payload,
-				"detail":  err.Error(),
-				"output":  out,
+				"request":    payload,
+				"detail":     err.Error(),
+				"output":     strings.TrimSpace(out),
+				"rolledBack": rolledBack,
 			})
 			return
 		}
 
 		result := map[string]interface{}{"ok": true, "output": out}
-		writeJSON(w, result, http.StatusOK)
-		notify(hub, "switch.ok", "network stack updated", map[string]interface{}{
+		notifyData := map[string]interface{}{
 			"request": payload,
 			"output":  strings.TrimSpace(out),
+		}
+		changed := 0
+		if switchRes != nil {
+			changed = len(switchRes.Changed)
+			result["adapter"] = switchRes.Adapter
+			result["was"] = switchRes.Was
+			result["now"] = switchRes.Now
+			result["changed"] = switchRes.Changed
+			notifyData["was"] = switchRes.Was
+			notifyData["now"] = switchRes.Now
+			notifyData["changed"] = switchRes.Changed
+		}
+		audit(r, "switch", map[string]string{
+			"ifName":  payload.IfName,
+			"mode":    payload.Mode,
+			"ok":      "true",
+			"changed": strconv.Itoa(changed),
 		})
+		writeJSON(w, result, http.StatusOK)
+		notify(hub, "switch.ok", "network stack updated", notifyData)
 	}
 }
 
@@ -182,10 +235,15 @@ func WarpHandler(hub *events.Hub) http.HandlerFunc {
 			return
 		}
 
+		// Mutations keep their own budget instead of the request context: if the
+		// browser goes away mid-request, killing the helper process would also
+		// kill the verification/rollback that follows.
 		ctx, cancel := context.WithTimeout(context.Background(), timeoutShort)
 		defer cancel()
 
 		out, err := applyWarpAction(ctx, payload.Action)
+		// The connection state feeds freeFlow in the snapshot.
+		invalidateNetworkSnapshot()
 		if err != nil && errors.Is(err, errUnknownWarpAction) {
 			writeJSON(w, map[string]string{"error": "unknown action"}, http.StatusBadRequest)
 			notify(hub, "warp.error", "unknown action", payload)
@@ -193,6 +251,11 @@ func WarpHandler(hub *events.Hub) http.HandlerFunc {
 		}
 
 		if err != nil {
+			audit(r, "warp", map[string]string{
+				"action": payload.Action,
+				"ok":     "false",
+				"detail": err.Error(),
+			})
 			result := map[string]interface{}{"error": "warp error", "detail": err.Error(), "output": out}
 			writeJSON(w, result, http.StatusInternalServerError)
 			notify(hub, "warp.error", "failed to update warp state", map[string]interface{}{
@@ -205,6 +268,11 @@ func WarpHandler(hub *events.Hub) http.HandlerFunc {
 
 		warpProbe := probeWarpStatus(ctx)
 
+		audit(r, "warp", map[string]string{
+			"action":    payload.Action,
+			"ok":        "true",
+			"connected": strconv.FormatBool(warpProbe.Connected),
+		})
 		result := map[string]interface{}{"ok": true, "output": out, "connected": warpProbe.Connected, "status": warpProbe.Status}
 		writeJSON(w, result, http.StatusOK)
 		notify(hub, "warp.ok", "warp state updated", map[string]interface{}{
@@ -222,7 +290,9 @@ func WarpStatusHandler() http.HandlerFunc {
 			writeJSON(w, map[string]string{"error": "method not allowed"}, http.StatusMethodNotAllowed)
 			return
 		}
-		ctx, cancel := context.WithTimeout(context.Background(), timeoutShort)
+		// Read-only probe: bind it to the request so a client that navigates
+		// away does not leave a warp-cli process behind.
+		ctx, cancel := context.WithTimeout(r.Context(), timeoutShort)
 		defer cancel()
 		probe := probeWarpStatus(ctx)
 		writeJSON(w, map[string]interface{}{
@@ -266,7 +336,13 @@ func DnsHandler(hub *events.Hub) http.HandlerFunc {
 		}
 
 		out, err := applyDnsServers(payload.IfName, payload.IPv4Servers, payload.IPv6Servers)
+		invalidateNetworkSnapshot()
 		if err != nil {
+			audit(r, "dns", map[string]string{
+				"ifName": payload.IfName,
+				"ok":     "false",
+				"detail": err.Error(),
+			})
 			writeJSON(w, map[string]interface{}{"error": "command failed", "detail": err.Error(), "output": out}, http.StatusInternalServerError)
 			notify(hub, "dns.error", "failed to update dns servers", map[string]interface{}{
 				"request": payload,
@@ -276,6 +352,12 @@ func DnsHandler(hub *events.Hub) http.HandlerFunc {
 			return
 		}
 
+		audit(r, "dns", map[string]string{
+			"ifName": payload.IfName,
+			"ipv4":   describeDnsServers(payload.IPv4Servers),
+			"ipv6":   describeDnsServers(payload.IPv6Servers),
+			"ok":     "true",
+		})
 		writeJSON(w, map[string]interface{}{"ok": true, "output": out}, http.StatusOK)
 		notify(hub, "dns.ok", "dns servers updated", map[string]interface{}{
 			"request": payload,
@@ -284,53 +366,35 @@ func DnsHandler(hub *events.Hub) http.HandlerFunc {
 	}
 }
 
-func SettingsHandler(hub *events.Hub) http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
-		switch r.Method {
-		case http.MethodGet:
-			cfg, err := appsettings.Load()
-			if err != nil {
-				writeJSON(w, map[string]string{"error": err.Error()}, http.StatusInternalServerError)
-				return
-			}
-			writeJSON(w, settingsSnapshot{AutoStart: cfg.AutoStart, SilentStart: cfg.SilentStart, WarpAutoStart: cfg.WarpAutoStart, WarpAppAutoStart: cfg.WarpAppAutoStart}, http.StatusOK)
-		case http.MethodPost:
-			var payload settingsSnapshot
-			if err := json.NewDecoder(r.Body).Decode(&payload); err != nil {
-				writeJSON(w, map[string]string{"error": "invalid json"}, http.StatusBadRequest)
-				return
-			}
-			prevCfg, err := appsettings.Load()
-			if err != nil {
-				writeJSON(w, map[string]string{"error": err.Error()}, http.StatusInternalServerError)
-				return
-			}
-			cfg := appsettings.Settings{AutoStart: payload.AutoStart, SilentStart: payload.SilentStart, WarpAutoStart: payload.WarpAutoStart, WarpAppAutoStart: payload.WarpAppAutoStart}
-			if err := appsettings.Save(cfg); err != nil {
-				writeJSON(w, map[string]string{"error": err.Error()}, http.StatusInternalServerError)
-				return
-			}
-			if prevCfg.AutoStart != cfg.AutoStart {
-				if err := appsettings.ApplyStartupShortcut(cfg.AutoStart); err != nil {
-					writeJSON(w, map[string]string{"error": err.Error()}, http.StatusInternalServerError)
-					return
-				}
-			}
-			if prevCfg.WarpAppAutoStart != cfg.WarpAppAutoStart {
-				if err := appsettings.ApplyWarpAppStartupShortcut(cfg.WarpAppAutoStart); err != nil {
-					writeJSON(w, map[string]string{"error": err.Error()}, http.StatusInternalServerError)
-					return
-				}
-			}
-			notify(hub, "settings.ok", "settings updated", settingsSnapshot{AutoStart: cfg.AutoStart, SilentStart: cfg.SilentStart, WarpAutoStart: cfg.WarpAutoStart, WarpAppAutoStart: cfg.WarpAppAutoStart})
-			writeJSON(w, map[string]any{"ok": true, "settings": settingsSnapshot{AutoStart: cfg.AutoStart, SilentStart: cfg.SilentStart, WarpAutoStart: cfg.WarpAutoStart, WarpAppAutoStart: cfg.WarpAppAutoStart}}, http.StatusOK)
-		default:
-			writeJSON(w, map[string]string{"error": "method not allowed"}, http.StatusMethodNotAllowed)
-		}
-	}
+// WebSocket keepalive parameters. The UI never sends messages, so without a
+// keepalive a dead peer (sleep, network change, killed webview) is never
+// noticed and the handler leaks until the process exits.
+const (
+	wsWriteWait  = 10 * time.Second
+	wsPongWait   = 60 * time.Second
+	wsPingPeriod = 25 * time.Second
+	wsReadLimit  = 1024
+)
+
+type wsKeepalive struct {
+	writeWait  time.Duration
+	pongWait   time.Duration
+	pingPeriod time.Duration
 }
 
-func WSHandler(hub *events.Hub) http.HandlerFunc {
+var defaultWSKeepalive = wsKeepalive{
+	writeWait:  wsWriteWait,
+	pongWait:   wsPongWait,
+	pingPeriod: wsPingPeriod,
+}
+
+func WSHandler(hub *events.Hub, allowedOrigins []string) http.HandlerFunc {
+	// The cached snapshot is shared with /api/v1/status, so opening a window
+	// does not start a second full collection.
+	return wsHandler(hub, getNetworkSnapshot, defaultWSKeepalive, newWSUpgrader(allowedOrigins))
+}
+
+func wsHandler(hub *events.Hub, snapshot func() (networkSnapshot, error), keepalive wsKeepalive, upgrader websocket.Upgrader) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		c, err := upgrader.Upgrade(w, r, nil)
 		if err != nil {
@@ -342,27 +406,71 @@ func WSHandler(hub *events.Hub) http.HandlerFunc {
 		sub := hub.Subscribe(8)
 		defer hub.Unsubscribe(sub)
 
-		if err := c.WriteJSON(events.Event{Type: "hello", Message: "connected to BKNetwork"}); err != nil {
+		// Read pump: the UI sends nothing, but reading is what lets the
+		// connection observe pongs and disconnects. Closing the channel unblocks
+		// the write loop below.
+		done := make(chan struct{})
+		var closeOnce sync.Once
+		stop := func() { closeOnce.Do(func() { close(done) }) }
+
+		c.SetReadLimit(wsReadLimit)
+		if err := c.SetReadDeadline(time.Now().Add(keepalive.pongWait)); err != nil {
+			log.Printf("ws set read deadline: %v", err)
+			return
+		}
+		c.SetPongHandler(func(string) error {
+			return c.SetReadDeadline(time.Now().Add(keepalive.pongWait))
+		})
+
+		go func() {
+			defer stop()
+			for {
+				if _, _, readErr := c.ReadMessage(); readErr != nil {
+					return
+				}
+			}
+		}()
+
+		writeEvent := func(event events.Event) error {
+			if err := c.SetWriteDeadline(time.Now().Add(keepalive.writeWait)); err != nil {
+				return err
+			}
+			return c.WriteJSON(event)
+		}
+
+		if err := writeEvent(events.Event{Type: "hello", Message: "connected to BKNetwork"}); err != nil {
 			log.Printf("ws write hello: %v", err)
 			return
 		}
-		snap, snapErr := collectNetworkSnapshot()
+		snap, snapErr := snapshot()
 		if snapErr != nil {
 			log.Printf("ws collect snapshot: %v", snapErr)
 		}
-		if err := c.WriteJSON(events.Event{Type: "network.status", Message: "network snapshot", Data: snap}); err != nil {
+		if err := writeEvent(events.Event{Type: "network.status", Message: "network snapshot", Data: snap}); err != nil {
 			log.Printf("ws write snapshot: %v", err)
 			return
 		}
 
+		ping := time.NewTicker(keepalive.pingPeriod)
+		defer ping.Stop()
+
 		for {
-			event, ok := <-sub
-			if !ok {
+			select {
+			case <-done:
 				return
-			}
-			if err := c.WriteJSON(event); err != nil {
-				log.Println("ws write error:", err)
-				return
+			case <-ping.C:
+				if err := c.WriteControl(websocket.PingMessage, nil, time.Now().Add(keepalive.writeWait)); err != nil {
+					log.Printf("ws ping: %v", err)
+					return
+				}
+			case event, ok := <-sub:
+				if !ok {
+					return
+				}
+				if err := writeEvent(event); err != nil {
+					log.Println("ws write error:", err)
+					return
+				}
 			}
 		}
 	}
@@ -380,7 +488,7 @@ func StatusHandler(hub *events.Hub) http.HandlerFunc {
 		if adminErr != nil {
 			adminErrMsg = adminErr.Error()
 		}
-		network, _ := collectNetworkSnapshot()
+		network, _ := getNetworkSnapshot()
 		writeJSON(w, map[string]interface{}{
 			"service": map[string]interface{}{
 				"name":    "BKNetwork",
@@ -395,26 +503,5 @@ func StatusHandler(hub *events.Hub) http.HandlerFunc {
 			"network":   network,
 			"time":      time.Now().Format(time.RFC3339),
 		}, http.StatusOK)
-	}
-}
-
-func LatestVersionHandler() http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
-		if r.Method != http.MethodGet {
-			writeJSON(w, map[string]string{"error": "method not allowed"}, http.StatusMethodNotAllowed)
-			return
-		}
-
-		ctx, cancel := context.WithTimeout(r.Context(), timeoutMedium)
-		defer cancel()
-
-		tag, err := fetchLatestReleaseTag(ctx)
-		if err != nil {
-			log.Printf("latest version check failed: %v", err)
-			writeJSON(w, map[string]interface{}{"ok": true, "tag": ""}, http.StatusOK)
-			return
-		}
-
-		writeJSON(w, map[string]interface{}{"ok": true, "tag": tag}, http.StatusOK)
 	}
 }

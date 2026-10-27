@@ -23,10 +23,11 @@ const dns64ModeStateEl = document.getElementById('dns64ModeState');
 const settingsOpenBtn = document.getElementById('settingsOpenBtn');
 const settingsOverlayEl = document.getElementById('settingsOverlay');
 const settingsCloseBtn = document.getElementById('settingsCloseBtn');
+const settingsDiagnosticsBtn = document.getElementById('settingsDiagnosticsBtn');
 const settingAutoStartEl = document.getElementById('settingAutoStart');
 const settingSilentStartEl = document.getElementById('settingSilentStart');
-const settingWarpAutoStartEl = document.getElementById('settingWarpAutoStart');
 const settingWarpAppAutoStartEl = document.getElementById('settingWarpAppAutoStart');
+const settingDisableOnlineChecksEl = document.getElementById('settingDisableOnlineChecks');
 const operationToastEl = document.getElementById('operationToast');
 const operationToastTitleEl = document.getElementById('operationToastTitle');
 const operationToastDescEl = document.getElementById('operationToastDesc');
@@ -37,7 +38,6 @@ const appVersionEl = document.querySelector('.lead');
 const dnsIpv4InputEl = document.getElementById('dnsIpv4Input');
 const dnsIpv6InputEl = document.getElementById('dnsIpv6Input');
 const dnsStatusEl = document.getElementById('dnsStatus');
-const lastResultEl = document.getElementById('lastResult');
 const lastUpdatedEl = document.getElementById('lastUpdated');
 const trafficUsageEl = document.getElementById('trafficUsage');
 const adapterListEl = document.getElementById('adapterList');
@@ -58,6 +58,8 @@ const settingsState = {
   silentStart: false,
   warpAutoStart: false,
   warpAppAutoStart: false,
+  disableOnlineChecks: false,
+  loaded: false,
   saving: false,
 };
 const operationToastState = {
@@ -427,6 +429,13 @@ async function fetchLatestReleaseTag() {
 }
 
 async function checkForNewVersion() {
+  if (!settingsState.loaded) {
+    await loadSettings().catch(() => {});
+  }
+  if (settingsState.disableOnlineChecks) {
+    return;
+  }
+
   const currentVersion = getCurrentVersionText();
   if (!currentVersion) {
     return;
@@ -463,8 +472,8 @@ function scheduleDeferredStartupTasks() {
 function syncSettingsControls() {
   if (settingAutoStartEl) settingAutoStartEl.checked = !!settingsState.autoStart;
   if (settingSilentStartEl) settingSilentStartEl.checked = !!settingsState.silentStart;
-  if (settingWarpAutoStartEl) settingWarpAutoStartEl.checked = !!settingsState.warpAutoStart;
   if (settingWarpAppAutoStartEl) settingWarpAppAutoStartEl.checked = !!settingsState.warpAppAutoStart;
+  if (settingDisableOnlineChecksEl) settingDisableOnlineChecksEl.checked = !!settingsState.disableOnlineChecks;
 }
 
 function setSettingsOpen(open) {
@@ -485,7 +494,15 @@ async function loadSettings() {
     settingsState.silentStart = !!data.silentStart;
     settingsState.warpAutoStart = !!data.warpAutoStart;
     settingsState.warpAppAutoStart = !!data.warpAppAutoStart;
+    settingsState.disableOnlineChecks = !!data.disableOnlineChecks;
+    settingsState.loaded = true;
     syncSettingsControls();
+    if (data.warning) {
+      // 配置文件损坏时后端返回默认值 + warning，保存一次即可修复
+      setSettingsStatus('已使用默认值，重新保存可修复配置文件');
+      appendLog(`读取设置失败：${data.warning}`);
+      return;
+    }
     setSettingsStatus('已加载');
   } catch (err) {
     setSettingsStatus(`加载失败：${err.message}`);
@@ -512,6 +529,7 @@ async function saveSettings() {
         silentStart: !!settingsState.silentStart,
         warpAutoStart: !!settingsState.warpAutoStart,
         warpAppAutoStart: !!settingsState.warpAppAutoStart,
+        disableOnlineChecks: !!settingsState.disableOnlineChecks,
       }),
     });
     const data = await res.json();
@@ -520,11 +538,45 @@ async function saveSettings() {
     }
     setSettingsStatus('已保存');
     appendLog('设置已保存');
+    if (data.warning) {
+      appendLog(`设置已保存，但原有配置文件读取失败：${data.warning}`);
+    }
   } catch (err) {
     setSettingsStatus(`保存失败：${err.message}`);
     appendLog(`设置保存失败：${err.message}`);
   } finally {
     settingsState.saving = false;
+  }
+}
+
+// 导出诊断信息：打包版没有可见日志，用户报障时需要一份可直接附带的自检文件。
+async function exportDiagnostics() {
+  if (!settingsDiagnosticsBtn) return;
+  settingsDiagnosticsBtn.disabled = true;
+  setSettingsStatus('正在收集诊断信息...');
+  try {
+    const res = await fetch('/api/v1/diagnostics', { cache: 'no-store' });
+    if (!res.ok) {
+      throw new Error(`HTTP ${res.status}`);
+    }
+    const data = await res.json();
+    const stamp = new Date().toISOString().replace(/[:.]/g, '-');
+    const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `bknetwork-diagnostics-${stamp}.json`;
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    window.setTimeout(() => URL.revokeObjectURL(url), 1000);
+    setSettingsStatus('诊断信息已导出');
+    appendLog('诊断信息已导出');
+  } catch (err) {
+    setSettingsStatus(`导出失败：${err.message}`);
+    appendLog(`诊断信息导出失败：${err.message}`);
+  } finally {
+    settingsDiagnosticsBtn.disabled = false;
   }
 }
 
@@ -600,9 +652,54 @@ function isDns64ModeActive(adapter) {
   return ipv6.length === 1 && DNS64_CANDIDATES.includes(ipv6[0]);
 }
 
+// 开启 DNS64 前的原始 IPv6 DNS 备份。保存在 localStorage 里，避免刷新或重启后
+// 找不到原值，从而把用户的 DNS 永久留在 DNS64 解析器上。
+const DNS64_BACKUP_KEY = 'bknetwork.dns64Backup';
+
+function readDns64Backups() {
+  try {
+    const raw = localStorage.getItem(DNS64_BACKUP_KEY);
+    const parsed = raw ? JSON.parse(raw) : null;
+    return parsed && typeof parsed === 'object' && !Array.isArray(parsed) ? parsed : {};
+  } catch (_) {
+    return {};
+  }
+}
+
+function writeDns64Backups(map) {
+  try {
+    localStorage.setItem(DNS64_BACKUP_KEY, JSON.stringify(map));
+  } catch (_) {
+    // 存储不可用时仅保留内存中的备份
+  }
+}
+
+function rememberDns64Backup(adapterName, servers) {
+  if (!adapterName || !Array.isArray(servers) || servers.length === 0) return;
+  const map = readDns64Backups();
+  map[adapterName] = servers;
+  writeDns64Backups(map);
+}
+
+function forgetDns64Backup(adapterName) {
+  const map = readDns64Backups();
+  if (!adapterName || !(adapterName in map)) return;
+  delete map[adapterName];
+  writeDns64Backups(map);
+}
+
+function recallDns64Backup(adapterName) {
+  if (dns64ModeState.backupIpv6Servers.length > 0) {
+    return dns64ModeState.backupIpv6Servers;
+  }
+  const stored = readDns64Backups()[adapterName];
+  return Array.isArray(stored) ? stored : [];
+}
+
 function getDns64Backup(adapter) {
   const { ipv6 } = splitDnsServers(adapter?.dns);
-  return ipv6;
+  // 已经指向 DNS64 解析器的值不算“原始配置”，否则反复开关会把备份覆盖成解析器。
+  return ipv6.filter(server => !DNS64_CANDIDATES.includes(server));
 }
 
 async function postActionWithRollback(path, body) {
@@ -758,8 +855,13 @@ async function applyDns64Mode(enabled) {
     await applyWarpToggle(false);
   }
 
+  // 关闭时要用“开启那一刻记录的备份”，必须在覆盖内存状态之前取出来
+  const recordedBackup = recallDns64Backup(adapter.name);
   const backupIpv6Servers = getDns64Backup(adapter);
-  dns64ModeState.backupIpv6Servers = backupIpv6Servers;
+  dns64ModeState.backupIpv6Servers = enabled ? backupIpv6Servers : recordedBackup;
+  if (enabled && backupIpv6Servers.length > 0) {
+    rememberDns64Backup(adapter.name, backupIpv6Servers);
+  }
   dns64ModeState.pending = { enabled, adapterName: adapter.name };
   dns64ModeToggleEl.checked = enabled;
   setBusy(true);
@@ -773,8 +875,15 @@ async function applyDns64Mode(enabled) {
       await postActionWithRollback('/api/v1/dns', { ifName: adapter.name, ipv6Servers: [resolver] });
       setDns64ModeStatus('当前：DNS64 已启用');
     } else {
+      const restoreServers = recordedBackup;
       await postActionSilently('/api/v1/switch', { ifName: adapter.name, mode: 'both' });
-      await postActionWithRollback('/api/v1/dns', { ifName: adapter.name, ipv6Servers: ['2606:4700:4700::1111'] });
+      if (restoreServers.length > 0) {
+        await postActionWithRollback('/api/v1/dns', { ifName: adapter.name, ipv6Servers: restoreServers });
+      } else {
+        // 没有备份时宁可保持现状，也不要硬写成某个公共 DNS
+        appendLog('未记录原始 IPv6 DNS，关闭 DNS64 时保留当前 DNS 设置');
+      }
+      forgetDns64Backup(adapter.name);
       setDns64ModeStatus('当前：双栈');
     }
     dns64ModeState.backupIpv6Servers = enabled ? backupIpv6Servers : [];
@@ -898,17 +1007,56 @@ async function fetchIpv6AddressOnce() {
   }
 }
 
+// 本地快照里已有的全局 IPv6 地址足以判断免流是否可用，不必再问公网回显服务。
+function findLocalIpv6Address(network) {
+  for (const adapter of network?.adapters || []) {
+    for (const address of adapter.ipv6 || []) {
+      const value = String(address || '').trim();
+      if (!value || value.startsWith('fe80:') || value.startsWith('::1')) {
+        continue;
+      }
+      return value;
+    }
+  }
+  return '';
+}
+
+async function loadNetworkForLocalCheck() {
+  if (latestNetwork) {
+    return latestNetwork;
+  }
+  try {
+    const res = await fetch('/api/v1/status', { cache: 'no-store' });
+    const data = await res.json();
+    return data?.network || null;
+  } catch (_) {
+    return null;
+  }
+}
+
 async function checkIpv6Address() {
   setIpv6CheckStatus('warn', '正在检测 IPv6 地址...');
+
+  const local = findLocalIpv6Address(await loadNetworkForLocalCheck());
+  if (local) {
+    setIpv6CheckStatus('ok', local);
+    return local;
+  }
+
+  if (settingsState.disableOnlineChecks) {
+    setIpv6CheckStatus('warn', '未发现 IPv6 地址（已关闭联网检查）');
+    return null;
+  }
+
   let lastError = null;
-  for (let attempt = 1; attempt <= 3; attempt += 1) {
+  for (let attempt = 1; attempt <= 2; attempt += 1) {
     try {
       const ipv6 = await fetchIpv6AddressOnce();
       setIpv6CheckStatus('ok', ipv6);
       return ipv6;
     } catch (err) {
       lastError = err;
-      if (attempt < 3) {
+      if (attempt < 2) {
         await delay(800);
       }
     }
@@ -1283,14 +1431,12 @@ async function postAction(path, body) {
       body: JSON.stringify(body),
     });
     const data = await res.json();
-    setText(lastResultEl, JSON.stringify(data, null, 2));
     appendLog(`${path} -> ${data.ok ? 'ok' : 'error'}`);
     if (!res.ok) {
       throw new Error(data.error || 'request failed');
     }
     return data;
   } catch (err) {
-    setText(lastResultEl, err.message);
     appendLog(`请求失败：${err.message}`);
     throw err;
   } finally {
@@ -1305,7 +1451,6 @@ async function postActionSilently(path, body) {
     body: JSON.stringify(body),
   });
   const data = await res.json();
-  setText(lastResultEl, JSON.stringify(data, null, 2));
   appendLog(`${path} -> ${data.ok ? 'ok' : 'error'}`);
   if (!res.ok) {
     throw new Error(data.error || 'request failed');
@@ -1515,6 +1660,12 @@ if (settingsCloseBtn) {
   settingsCloseBtn.addEventListener('click', () => setSettingsOpen(false));
 }
 
+if (settingsDiagnosticsBtn) {
+  settingsDiagnosticsBtn.addEventListener('click', () => {
+    exportDiagnostics().catch(err => console.error('操作失败:', err));
+  });
+}
+
 if (settingsOverlayEl) {
   settingsOverlayEl.addEventListener('click', (event) => {
     if (event.target === settingsOverlayEl) {
@@ -1537,16 +1688,16 @@ if (settingSilentStartEl) {
   });
 }
 
-if (settingWarpAutoStartEl) {
-  settingWarpAutoStartEl.addEventListener('change', () => {
-    settingsState.warpAutoStart = settingWarpAutoStartEl.checked;
+if (settingWarpAppAutoStartEl) {
+  settingWarpAppAutoStartEl.addEventListener('change', () => {
+    settingsState.warpAppAutoStart = settingWarpAppAutoStartEl.checked;
     saveSettings();
   });
 }
 
-if (settingWarpAppAutoStartEl) {
-  settingWarpAppAutoStartEl.addEventListener('change', () => {
-    settingsState.warpAppAutoStart = settingWarpAppAutoStartEl.checked;
+if (settingDisableOnlineChecksEl) {
+  settingDisableOnlineChecksEl.addEventListener('change', () => {
+    settingsState.disableOnlineChecks = settingDisableOnlineChecksEl.checked;
     saveSettings();
   });
 }
@@ -1558,6 +1709,14 @@ window.addEventListener('keydown', (event) => {
 });
 
 let activeWs = null;
+let wsReconnectAttempt = 0;
+
+// 指数退避 + 抖动：服务重启或崩溃时不要每 2 秒集中重连一次
+function nextReconnectDelay() {
+  const base = Math.min(30000, 1000 * 2 ** wsReconnectAttempt);
+  wsReconnectAttempt = Math.min(wsReconnectAttempt + 1, 5);
+  return Math.round(base * (0.5 + Math.random() * 0.5));
+}
 
 function connectWS() {
   const scheme = location.protocol === 'https:' ? 'wss' : 'ws';
@@ -1565,6 +1724,7 @@ function connectWS() {
   activeWs = ws;
 
   ws.addEventListener('open', () => {
+    wsReconnectAttempt = 0;
     setBackendBadge('ok');
     appendLog('WebSocket 已连接');
   });
@@ -1616,7 +1776,6 @@ function connectWS() {
       if (data.type === 'hello') {
         return;
       }
-      setText(lastResultEl, JSON.stringify(data, null, 2));
       appendLog(`${data.type} · ${data.message}`);
     } catch (err) {
       console.error('WebSocket 消息解析失败:', err);
@@ -1629,8 +1788,9 @@ function connectWS() {
       activeWs = null;
     }
     setBackendBadge('err');
-    appendLog('WebSocket 已断开，准备重连');
-    setTimeout(connectWS, 2000);
+    const delay = nextReconnectDelay();
+    appendLog(`WebSocket 已断开，${Math.round(delay / 1000)}s 后重连`);
+    setTimeout(connectWS, delay);
   });
 
   ws.addEventListener('error', () => {
@@ -1640,6 +1800,23 @@ function connectWS() {
 
 setAdvancedMode(false);
 showInitializationToast();
+
+// 引导 token 只用于换取会话 Cookie，立即从地址栏和历史记录中去掉
+if (location.search) {
+  const params = new URLSearchParams(location.search);
+  if (params.has('token')) {
+    params.delete('token');
+    const query = params.toString();
+    history.replaceState(null, '', location.pathname + (query ? '?' + query : '') + location.hash);
+  }
+}
+
+// 切换按钮通过 data 属性绑定，不依赖内联 onclick（CSP 禁止内联脚本）
+for (const button of document.querySelectorAll('[data-switch-mode]')) {
+  button.addEventListener('click', () => {
+    switchStack(button.dataset.switchMode).catch(() => {});
+  });
+}
 
 refreshStatus(true);
 startWarpStatusPoll();

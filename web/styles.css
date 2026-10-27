@@ -171,6 +171,8 @@ h1 { margin: 8px 0 10px; font-size: clamp(28px, 4vw, 44px); line-height: 1.1; le
 .mini .value strong { font-size: 15px; }
 
 .section { padding: 24px; }
+.section--spaced { margin-top: 16px; }
+.section--spaced-sm { margin-top: 12px; }
 .section h2 { margin: 0 0 16px; font-size: 16px; letter-spacing: -0.01em; font-weight: 600; }
 
 .field { display: grid; gap: 8px; margin-bottom: 14px; }
@@ -361,6 +363,11 @@ body.advanced-mode .site-footer { position: static; margin-top: auto; padding: 1
 .setting-copy { min-width: 0; }
 .setting-title { font-size: 14px; font-weight: 600; margin-bottom: 4px; }
 .setting-note { color: var(--fg-secondary); font-size: 12px; line-height: 1.5; }
+.dns-status { margin-top: 10px; color: var(--fg-secondary); font-size: 11px; min-height: 1.2em; }
+.settings-actions { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.settings-action { padding: 8px 14px; border-radius: 8px; border: 1px solid var(--line-strong); background: var(--bg-soft); color: var(--fg); font-size: 12px; font-weight: 600; cursor: pointer; transition: background var(--dur-fast) var(--ease); }
+.settings-action:hover { background: var(--accent-soft); border-color: var(--accent); }
+.settings-action-note { color: var(--fg-secondary); font-size: 11px; }
 .settings-status { margin-top: 8px; color: var(--accent); font-size: 11px; font-weight: 500; letter-spacing: 0.02em; text-transform: uppercase; min-height: 1.2em; }
 
 .ipv6-check-badge { margin-top: 14px; width: fit-content; gap: 8px; }
