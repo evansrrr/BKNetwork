@@ -108,8 +108,8 @@ func collectNetworkSnapshot() (networkSnapshot, error) {
 
 	var (
 		basicRaw         string
-		ipv4Binding      map[string]bool
-		ipv6Binding      map[string]bool
+		ipv4State        netshInterfaceState
+		ipv6State        netshInterfaceState
 		ipv4Configs      []netshIPConfig
 		ipv4DefaultRoute string
 		ipv6DefaultRoute string
@@ -120,9 +120,10 @@ func collectNetworkSnapshot() (networkSnapshot, error) {
 		tcpProbe         tcpProbeSnapshot
 	)
 
+	// Phase 1: queries that do not depend on each other.
 	var wg sync.WaitGroup
-	wg.Add(11)
-	// 1. PowerShell: Get-NetAdapter (保留，需要 MAC 和描述信息)
+	wg.Add(9)
+	// PowerShell: Get-NetAdapter (needed for MAC address and description)
 	go func() {
 		defer wg.Done()
 		ctx, cancel := context.WithTimeout(baseCtx, timeoutShort)
@@ -134,29 +135,29 @@ func collectNetworkSnapshot() (networkSnapshot, error) {
 			log.Printf("snapshot: Get-NetAdapter failed: %v", err)
 		}
 	}()
-	// 2. netsh: IPv4 binding state
+	// netsh: interface list for both families. The same output also provides the
+	// index mapping the route parser needs, so it is fetched only once.
 	go func() {
 		defer wg.Done()
 		ctx, cancel := context.WithTimeout(baseCtx, timeoutShort)
 		defer cancel()
 		var err error
-		ipv4Binding, err = netshGetIPv4Binding(ctx)
+		ipv4State, err = netshGetInterfaces(ctx, "ipv4")
 		if err != nil {
-			log.Printf("snapshot: netsh IPv4 binding failed: %v", err)
+			log.Printf("snapshot: netsh IPv4 interface list failed: %v", err)
 		}
 	}()
-	// 3. netsh: IPv6 binding state
 	go func() {
 		defer wg.Done()
 		ctx, cancel := context.WithTimeout(baseCtx, timeoutShort)
 		defer cancel()
 		var err error
-		ipv6Binding, err = netshGetIPv6Binding(ctx)
+		ipv6State, err = netshGetInterfaces(ctx, "ipv6")
 		if err != nil {
-			log.Printf("snapshot: netsh IPv6 binding failed: %v", err)
+			log.Printf("snapshot: netsh IPv6 interface list failed: %v", err)
 		}
 	}()
-	// 4. netsh: IPv4 config (gateway)
+	// netsh: IPv4 config (gateway)
 	go func() {
 		defer wg.Done()
 		ctx, cancel := context.WithTimeout(baseCtx, timeoutShort)
@@ -167,29 +168,7 @@ func collectNetworkSnapshot() (networkSnapshot, error) {
 			log.Printf("snapshot: netsh IPv4 config failed: %v", err)
 		}
 	}()
-	// 5. netsh: IPv4 default route
-	go func() {
-		defer wg.Done()
-		ctx, cancel := context.WithTimeout(baseCtx, timeoutShort)
-		defer cancel()
-		var err error
-		ipv4DefaultRoute, err = netshGetIPv4DefaultRoute(ctx)
-		if err != nil {
-			log.Printf("snapshot: netsh IPv4 route failed: %v", err)
-		}
-	}()
-	// 6. netsh: IPv6 default route
-	go func() {
-		defer wg.Done()
-		ctx, cancel := context.WithTimeout(baseCtx, timeoutShort)
-		defer cancel()
-		var err error
-		ipv6DefaultRoute, err = netshGetIPv6DefaultRoute(ctx)
-		if err != nil {
-			log.Printf("snapshot: netsh IPv6 route failed: %v", err)
-		}
-	}()
-	// 6. netsh: DNS servers (IPv4 + IPv6)
+	// netsh: DNS servers (IPv4 + IPv6)
 	go func() {
 		defer wg.Done()
 		ctx, cancel := context.WithTimeout(baseCtx, timeoutShort)
@@ -210,21 +189,21 @@ func collectNetworkSnapshot() (networkSnapshot, error) {
 			log.Printf("snapshot: netsh IPv6 DNS failed: %v", err)
 		}
 	}()
-	// 7. warp-cli: status
+	// warp-cli: status
 	go func() {
 		defer wg.Done()
 		ctx, cancel := context.WithTimeout(baseCtx, timeoutMedium)
 		defer cancel()
 		warpStatus = probeWarpStatus(ctx)
 	}()
-	// 8. warp-cli: settings
+	// warp-cli: settings
 	go func() {
 		defer wg.Done()
 		ctx, cancel := context.WithTimeout(baseCtx, timeoutShort)
 		defer cancel()
 		warpSettings = probeWarpSettings(ctx)
 	}()
-	// 9. TCP probe (native Go, no process)
+	// TCP probe (native Go, no process)
 	go func() {
 		defer wg.Done()
 		ctx, cancel := context.WithTimeout(baseCtx, timeoutShort)
@@ -232,6 +211,32 @@ func collectNetworkSnapshot() (networkSnapshot, error) {
 		tcpProbe = probeCloudflareTCP(ctx)
 	}()
 	wg.Wait()
+
+	// Phase 2: the default route lookup reuses the interface index mapping from
+	// phase 1 instead of running "show interface" a second time.
+	var routeWG sync.WaitGroup
+	routeWG.Add(2)
+	go func() {
+		defer routeWG.Done()
+		ctx, cancel := context.WithTimeout(baseCtx, timeoutShort)
+		defer cancel()
+		var err error
+		ipv4DefaultRoute, err = netshGetIPv4DefaultRoute(ctx, ipv4State.Index)
+		if err != nil {
+			log.Printf("snapshot: netsh IPv4 route failed: %v", err)
+		}
+	}()
+	go func() {
+		defer routeWG.Done()
+		ctx, cancel := context.WithTimeout(baseCtx, timeoutShort)
+		defer cancel()
+		var err error
+		ipv6DefaultRoute, err = netshGetIPv6DefaultRoute(ctx, ipv6State.Index)
+		if err != nil {
+			log.Printf("snapshot: netsh IPv6 route failed: %v", err)
+		}
+	}()
+	routeWG.Wait()
 
 	basics, basicsErr := decodeJSONList[adapterBasic](basicRaw)
 
@@ -281,13 +286,13 @@ func collectNetworkSnapshot() (networkSnapshot, error) {
 
 	// Build binding map from netsh results
 	bindingMap := make(map[string]map[string]bool)
-	for name, enabled := range ipv4Binding {
+	for name, enabled := range ipv4State.Connected {
 		if bindingMap[name] == nil {
 			bindingMap[name] = make(map[string]bool)
 		}
 		bindingMap[name]["ms_tcpip"] = enabled
 	}
-	for name, enabled := range ipv6Binding {
+	for name, enabled := range ipv6State.Connected {
 		if bindingMap[name] == nil {
 			bindingMap[name] = make(map[string]bool)
 		}

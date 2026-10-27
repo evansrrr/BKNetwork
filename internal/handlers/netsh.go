@@ -61,9 +61,10 @@ func parseNetshShowInterface(raw string) map[string]bool {
 	return result
 }
 
-// parseNetshIPv4Interface parses output from "netsh interface ipv4 show interface".
+// parseNetshInterfaceConnected parses output from
+// "netsh interface ipv4/ipv6 show interface" (both families share the layout).
 // Returns adapter names and their connected state.
-func parseNetshIPv4Interface(raw string) map[string]bool {
+func parseNetshInterfaceConnected(raw string) map[string]bool {
 	result := make(map[string]bool)
 	lines := strings.Split(raw, "\n")
 	for _, line := range lines {
@@ -82,9 +83,9 @@ func parseNetshIPv4Interface(raw string) map[string]bool {
 	return result
 }
 
-// parseNetshIPv4InterfaceWithIdx parses output from "netsh interface ipv4 show interface".
-// Returns a map of interface index to name.
-func parseNetshIPv4InterfaceWithIdx(raw string) map[string]string {
+// parseNetshInterfaceIndex parses output from
+// "netsh interface ipv4/ipv6 show interface" and maps interface index to name.
+func parseNetshInterfaceIndex(raw string) map[string]string {
 	result := make(map[string]string)
 	lines := strings.Split(raw, "\n")
 	for _, line := range lines {
@@ -101,18 +102,6 @@ func parseNetshIPv4InterfaceWithIdx(raw string) map[string]string {
 		result[idx] = name
 	}
 	return result
-}
-
-// parseNetshIPv6Interface parses output from "netsh interface ipv6 show interface".
-// Returns adapter names and their connected state.
-func parseNetshIPv6Interface(raw string) map[string]bool {
-	return parseNetshIPv4Interface(raw) // Same format
-}
-
-// parseNetshIPv6InterfaceWithIdx parses output from "netsh interface ipv6 show interface".
-// Returns a map of interface index to name.
-func parseNetshIPv6InterfaceWithIdx(raw string) map[string]string {
-	return parseNetshIPv4InterfaceWithIdx(raw) // Same format
 }
 
 // parseNetshIPv4Config parses output from "netsh interface ipv4 show config".
@@ -345,22 +334,26 @@ func extractQuotedString(line string) string {
 	return line[start+1 : start+1+end]
 }
 
-// netshGetIPv4Binding gets the IPv4/IPv6 binding state for all adapters.
-func netshGetIPv4Binding(ctx context.Context) (map[string]bool, error) {
-	raw, err := execWithTimeout(ctx, "netsh", "interface", "ipv4", "show", "interface")
-	if err != nil && strings.TrimSpace(raw) == "" {
-		return nil, err
-	}
-	return parseNetshIPv4Interface(raw), nil
+// netshInterfaceState is the parsed result of "netsh interface ipvX show
+// interface": adapter names mapped to their connected state, plus the interface
+// index mapping needed to interpret the route table.
+type netshInterfaceState struct {
+	Connected map[string]bool
+	Index     map[string]string
 }
 
-// netshGetIPv6Binding gets the IPv6 binding state for all adapters.
-func netshGetIPv6Binding(ctx context.Context) (map[string]bool, error) {
-	raw, err := execWithTimeout(ctx, "netsh", "interface", "ipv6", "show", "interface")
+// netshGetInterfaces runs "netsh interface ipvX show interface" once and returns
+// both the connected state and the index mapping, so callers do not have to run
+// the same command again for the route table.
+func netshGetInterfaces(ctx context.Context, family string) (netshInterfaceState, error) {
+	raw, err := execWithTimeout(ctx, "netsh", "interface", family, "show", "interface")
 	if err != nil && strings.TrimSpace(raw) == "" {
-		return nil, err
+		return netshInterfaceState{}, err
 	}
-	return parseNetshIPv6Interface(raw), nil
+	return netshInterfaceState{
+		Connected: parseNetshInterfaceConnected(raw),
+		Index:     parseNetshInterfaceIndex(raw),
+	}, nil
 }
 
 // netshGetIPv4Config gets IPv4 configuration including gateway.
@@ -373,15 +366,7 @@ func netshGetIPv4Config(ctx context.Context) ([]netshIPConfig, error) {
 }
 
 // netshGetIPv4DefaultRoute gets the interface name for the IPv4 default route.
-func netshGetIPv4DefaultRoute(ctx context.Context) (string, error) {
-	// Get interface list first to map index to name
-	ifaceRaw, err := execWithTimeout(ctx, "netsh", "interface", "ipv4", "show", "interface")
-	if err != nil && strings.TrimSpace(ifaceRaw) == "" {
-		return "", err
-	}
-	ifaceMap := parseNetshIPv4InterfaceWithIdx(ifaceRaw)
-
-	// Get route table
+func netshGetIPv4DefaultRoute(ctx context.Context, ifaceMap map[string]string) (string, error) {
 	routeRaw, err := execWithTimeout(ctx, "netsh", "interface", "ipv4", "show", "route")
 	if err != nil && strings.TrimSpace(routeRaw) == "" {
 		return "", err
@@ -390,15 +375,7 @@ func netshGetIPv4DefaultRoute(ctx context.Context) (string, error) {
 }
 
 // netshGetIPv6DefaultRoute gets the interface name for the IPv6 default route.
-func netshGetIPv6DefaultRoute(ctx context.Context) (string, error) {
-	// Get interface list first to map index to name
-	ifaceRaw, err := execWithTimeout(ctx, "netsh", "interface", "ipv6", "show", "interface")
-	if err != nil && strings.TrimSpace(ifaceRaw) == "" {
-		return "", err
-	}
-	ifaceMap := parseNetshIPv6InterfaceWithIdx(ifaceRaw)
-
-	// Get route table
+func netshGetIPv6DefaultRoute(ctx context.Context, ifaceMap map[string]string) (string, error) {
 	routeRaw, err := execWithTimeout(ctx, "netsh", "interface", "ipv6", "show", "route")
 	if err != nil && strings.TrimSpace(routeRaw) == "" {
 		return "", err
