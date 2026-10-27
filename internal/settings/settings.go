@@ -22,6 +22,11 @@ type Settings struct {
 	// own (GitHub version check, public IPv6 echo). Campus and restricted
 	// networks block or throttle them, and a failing check only produces noise.
 	DisableOnlineChecks bool `json:"disableOnlineChecks"`
+	// ProbeTarget is the host:port the dashboard's connectivity probe dials.
+	// Empty means the built-in default (cloudflare.com:443). Networks without
+	// working IPv4 routes to Cloudflare, or DNS64-only setups, can point it at
+	// a host that represents their connectivity better.
+	ProbeTarget string `json:"probeTarget,omitempty"`
 }
 
 var mu sync.Mutex

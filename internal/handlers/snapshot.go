@@ -7,9 +7,12 @@ import (
 	"net"
 	"runtime"
 	"sort"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
+
+	appsettings "bknetwork/internal/settings"
 )
 
 type adapterBasic struct {
@@ -466,14 +469,52 @@ var (
 	tcpProbeAt   time.Time
 )
 
+// defaultProbeTarget is the connectivity target the dashboard dials when the
+// user has not configured one. It is a well-known anycast address with a fast
+// TCP handshake, but networks that cannot reach it (DNS64-only setups, some
+// campus filters) make the probe report "offline" for a perfectly working
+// connection, so the target is overridable in the settings.
+const defaultProbeTarget = "cloudflare.com:443"
+
+// effectiveProbeTarget resolves the configured probe target: the saved value
+// when it is usable, the default otherwise (first run, load error, or a value
+// that no longer parses).
+func effectiveProbeTarget() string {
+	cfg, err := appsettings.Load()
+	if err != nil {
+		return defaultProbeTarget
+	}
+	if validProbeTarget(cfg.ProbeTarget) {
+		return cfg.ProbeTarget
+	}
+	return defaultProbeTarget
+}
+
+// validProbeTarget accepts a host:port dial target with a numeric port.
+func validProbeTarget(target string) bool {
+	host, port, err := net.SplitHostPort(strings.TrimSpace(target))
+	if err != nil || host == "" {
+		return false
+	}
+	portNum, err := strconv.Atoi(port)
+	return err == nil && portNum > 0 && portNum <= 65535
+}
+
 // cachedCloudflareTCP returns the last probe result while it is recent enough,
-// so the snapshot does not block on an outbound dial every few seconds.
+// so the snapshot does not block on an outbound dial every few seconds. The
+// cached entry is only valid for the target it was taken against: switching
+// the configured target re-probes immediately instead of serving the old
+// host's result until the TTL runs out.
 func cachedCloudflareTCP(ctx context.Context) tcpProbeSnapshot {
+	return cachedTCPProbe(ctx, effectiveProbeTarget(), probeTCPTarget)
+}
+
+func cachedTCPProbe(ctx context.Context, target string, prober func(context.Context, string) tcpProbeSnapshot) tcpProbeSnapshot {
 	tcpProbeMu.Lock()
 	last, at := tcpProbeLast, tcpProbeAt
 	tcpProbeMu.Unlock()
 
-	if !at.IsZero() {
+	if !at.IsZero() && last.Target == target {
 		ttl := tcpProbeSuccessTTL
 		if !last.OK {
 			ttl = tcpProbeFailureTTL
@@ -483,7 +524,7 @@ func cachedCloudflareTCP(ctx context.Context) tcpProbeSnapshot {
 		}
 	}
 
-	result := probeCloudflareTCP(ctx)
+	result := prober(ctx, target)
 
 	tcpProbeMu.Lock()
 	tcpProbeLast, tcpProbeAt = result, time.Now()
@@ -491,9 +532,9 @@ func cachedCloudflareTCP(ctx context.Context) tcpProbeSnapshot {
 	return result
 }
 
-func probeCloudflareTCP(ctx context.Context) tcpProbeSnapshot {
+func probeTCPTarget(ctx context.Context, target string) tcpProbeSnapshot {
 	result := tcpProbeSnapshot{
-		Target:    "cloudflare.com:443",
+		Target:    target,
 		CheckedAt: time.Now().Format(time.RFC3339),
 	}
 	start := time.Now()

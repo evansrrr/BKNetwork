@@ -13,11 +13,12 @@ import (
 
 // settingsSnapshot is the wire format of /api/v1/settings.
 type settingsSnapshot struct {
-	AutoStart           bool `json:"autoStart"`
-	SilentStart         bool `json:"silentStart"`
-	WarpAutoStart       bool `json:"warpAutoStart"`
-	WarpAppAutoStart    bool `json:"warpAppAutoStart"`
-	DisableOnlineChecks bool `json:"disableOnlineChecks"`
+	AutoStart           bool   `json:"autoStart"`
+	SilentStart         bool   `json:"silentStart"`
+	WarpAutoStart       bool   `json:"warpAutoStart"`
+	WarpAppAutoStart    bool   `json:"warpAppAutoStart"`
+	DisableOnlineChecks bool   `json:"disableOnlineChecks"`
+	ProbeTarget         string `json:"probeTarget,omitempty"`
 }
 
 func (s settingsSnapshot) toSettings() appsettings.Settings {
@@ -27,6 +28,7 @@ func (s settingsSnapshot) toSettings() appsettings.Settings {
 		WarpAutoStart:       s.WarpAutoStart,
 		WarpAppAutoStart:    s.WarpAppAutoStart,
 		DisableOnlineChecks: s.DisableOnlineChecks,
+		ProbeTarget:         strings.TrimSpace(s.ProbeTarget),
 	}
 }
 
@@ -37,6 +39,7 @@ func snapshotOf(cfg appsettings.Settings) settingsSnapshot {
 		WarpAutoStart:       cfg.WarpAutoStart,
 		WarpAppAutoStart:    cfg.WarpAppAutoStart,
 		DisableOnlineChecks: cfg.DisableOnlineChecks,
+		ProbeTarget:         cfg.ProbeTarget,
 	}
 }
 
@@ -146,6 +149,13 @@ func settingsHandler(hub *events.Hub, deps settingsDeps, effects settingsSideEff
 			}
 
 			next := payload.toSettings()
+			if next.ProbeTarget != "" && !validProbeTarget(next.ProbeTarget) {
+				writeJSON(w, map[string]string{
+					"error":  "invalid probeTarget",
+					"detail": "probeTarget must be host:port, e.g. cloudflare.com:443",
+				}, http.StatusBadRequest)
+				return
+			}
 			result, err := applySettingsChange(prevCfg, next, effects, deps.save)
 			if err != nil {
 				audit(r, "settings", map[string]string{"ok": "false", "detail": err.Error()})
@@ -168,6 +178,7 @@ func settingsHandler(hub *events.Hub, deps settingsDeps, effects settingsSideEff
 				"warpAutoStart":       strconv.FormatBool(next.WarpAutoStart),
 				"warpAppAutoStart":    strconv.FormatBool(next.WarpAppAutoStart),
 				"disableOnlineChecks": strconv.FormatBool(next.DisableOnlineChecks),
+				"probeTarget":         next.ProbeTarget,
 				"ok":                  "true",
 			})
 			notify(hub, "settings.ok", "settings updated", snapshotOf(next))
