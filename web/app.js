@@ -609,9 +609,54 @@ function isDns64ModeActive(adapter) {
   return ipv6.length === 1 && DNS64_CANDIDATES.includes(ipv6[0]);
 }
 
+// 开启 DNS64 前的原始 IPv6 DNS 备份。保存在 localStorage 里，避免刷新或重启后
+// 找不到原值，从而把用户的 DNS 永久留在 DNS64 解析器上。
+const DNS64_BACKUP_KEY = 'bknetwork.dns64Backup';
+
+function readDns64Backups() {
+  try {
+    const raw = localStorage.getItem(DNS64_BACKUP_KEY);
+    const parsed = raw ? JSON.parse(raw) : null;
+    return parsed && typeof parsed === 'object' && !Array.isArray(parsed) ? parsed : {};
+  } catch (_) {
+    return {};
+  }
+}
+
+function writeDns64Backups(map) {
+  try {
+    localStorage.setItem(DNS64_BACKUP_KEY, JSON.stringify(map));
+  } catch (_) {
+    // 存储不可用时仅保留内存中的备份
+  }
+}
+
+function rememberDns64Backup(adapterName, servers) {
+  if (!adapterName || !Array.isArray(servers) || servers.length === 0) return;
+  const map = readDns64Backups();
+  map[adapterName] = servers;
+  writeDns64Backups(map);
+}
+
+function forgetDns64Backup(adapterName) {
+  const map = readDns64Backups();
+  if (!adapterName || !(adapterName in map)) return;
+  delete map[adapterName];
+  writeDns64Backups(map);
+}
+
+function recallDns64Backup(adapterName) {
+  if (dns64ModeState.backupIpv6Servers.length > 0) {
+    return dns64ModeState.backupIpv6Servers;
+  }
+  const stored = readDns64Backups()[adapterName];
+  return Array.isArray(stored) ? stored : [];
+}
+
 function getDns64Backup(adapter) {
   const { ipv6 } = splitDnsServers(adapter?.dns);
-  return ipv6;
+  // 已经指向 DNS64 解析器的值不算“原始配置”，否则反复开关会把备份覆盖成解析器。
+  return ipv6.filter(server => !DNS64_CANDIDATES.includes(server));
 }
 
 async function postActionWithRollback(path, body) {
@@ -767,8 +812,13 @@ async function applyDns64Mode(enabled) {
     await applyWarpToggle(false);
   }
 
+  // 关闭时要用“开启那一刻记录的备份”，必须在覆盖内存状态之前取出来
+  const recordedBackup = recallDns64Backup(adapter.name);
   const backupIpv6Servers = getDns64Backup(adapter);
-  dns64ModeState.backupIpv6Servers = backupIpv6Servers;
+  dns64ModeState.backupIpv6Servers = enabled ? backupIpv6Servers : recordedBackup;
+  if (enabled && backupIpv6Servers.length > 0) {
+    rememberDns64Backup(adapter.name, backupIpv6Servers);
+  }
   dns64ModeState.pending = { enabled, adapterName: adapter.name };
   dns64ModeToggleEl.checked = enabled;
   setBusy(true);
@@ -782,8 +832,15 @@ async function applyDns64Mode(enabled) {
       await postActionWithRollback('/api/v1/dns', { ifName: adapter.name, ipv6Servers: [resolver] });
       setDns64ModeStatus('当前：DNS64 已启用');
     } else {
+      const restoreServers = recordedBackup;
       await postActionSilently('/api/v1/switch', { ifName: adapter.name, mode: 'both' });
-      await postActionWithRollback('/api/v1/dns', { ifName: adapter.name, ipv6Servers: ['2606:4700:4700::1111'] });
+      if (restoreServers.length > 0) {
+        await postActionWithRollback('/api/v1/dns', { ifName: adapter.name, ipv6Servers: restoreServers });
+      } else {
+        // 没有备份时宁可保持现状，也不要硬写成某个公共 DNS
+        appendLog('未记录原始 IPv6 DNS，关闭 DNS64 时保留当前 DNS 设置');
+      }
+      forgetDns64Backup(adapter.name);
       setDns64ModeStatus('当前：双栈');
     }
     dns64ModeState.backupIpv6Servers = enabled ? backupIpv6Servers : [];
