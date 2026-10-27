@@ -12,34 +12,22 @@ import (
 const networkSetupPath = "/usr/sbin/networksetup"
 
 func applyDarwinNetworkMode(serviceName, mode string) (string, error) {
-	var commands [][]string
-	switch mode {
-	case "ipv4":
-		commands = [][]string{
-			{networkSetupPath, "-setdhcp", serviceName},
-			{networkSetupPath, "-setv6off", serviceName},
-		}
-	case "ipv6":
-		commands = [][]string{
-			{networkSetupPath, "-setv6automatic", serviceName},
-			{networkSetupPath, "-setv4off", serviceName},
-		}
-	case "both":
-		commands = [][]string{
-			{networkSetupPath, "-setdhcp", serviceName},
-			{networkSetupPath, "-setv6automatic", serviceName},
-		}
-	default:
-		return "", fmt.Errorf("unknown mode: %s", mode)
+	steps, err := darwinSwitchSteps(networkSetupPath, serviceName, mode)
+	if err != nil {
+		return "", err
 	}
+
+	// The rollback logic lives in the generated shell script: when a step
+	// fails, the steps that already ran are undone before the script exits.
+	commands := []string{"sh", "-c", buildDarwinShellScript(steps)}
 
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
 	defer cancel()
-	out, err := runDarwinAdminCommands(ctx, commands)
-	if err == nil {
+	out, runErr := runDarwinAdminCommands(ctx, [][]string{commands})
+	if runErr == nil {
 		time.Sleep(time.Second)
 	}
-	return out, err
+	return out, runErr
 }
 
 func getDarwinIPv6State(serviceName string) (bool, error) {
@@ -95,25 +83,14 @@ func setDarwinAdapterDnsServers(serviceName string, servers []string) (string, e
 	return out, err
 }
 
+// runDarwinAdminCommands runs the commands through a single elevated
+// AppleScript invocation so the user only sees one authorization prompt.
 func runDarwinAdminCommands(ctx context.Context, commands [][]string) (string, error) {
 	parts := make([]string, 0, len(commands))
 	for _, command := range commands {
-		quoted := make([]string, 0, len(command))
-		for _, arg := range command {
-			quoted = append(quoted, shellQuote(arg))
-		}
-		parts = append(parts, strings.Join(quoted, " "))
+		parts = append(parts, shellQuoteArgs(command))
 	}
 	shellCommand := strings.Join(parts, " && ")
 	script := fmt.Sprintf("do shell script \"%s\" with administrator privileges", appleScriptEscape(shellCommand))
 	return execWithTimeout(ctx, "osascript", "-e", script)
-}
-
-func shellQuote(value string) string {
-	return "'" + strings.ReplaceAll(value, "'", "'\"'\"'") + "'"
-}
-
-func appleScriptEscape(value string) string {
-	value = strings.ReplaceAll(value, "\\", "\\\\")
-	return strings.ReplaceAll(value, "\"", "\\\"")
 }

@@ -131,28 +131,51 @@ func SwitchStackHandler(hub *events.Hub) http.HandlerFunc {
 			return
 		}
 
-		out, err := applyNetworkMode(payload.IfName, payload.Mode)
+		switchRes, out, err := applyNetworkMode(payload.IfName, payload.Mode)
 		if err != nil {
+			status := http.StatusInternalServerError
+			if errors.Is(err, errAdapterNotFound) || errors.Is(err, errUnknownMode) {
+				status = http.StatusBadRequest
+			}
 			result := map[string]interface{}{
 				"error":  "command failed",
 				"detail": err.Error(),
 				"output": out,
 			}
-			writeJSON(w, result, http.StatusInternalServerError)
+			rolledBack := false
+			if switchRes != nil {
+				rolledBack = switchRes.RolledBack
+				result["code"] = switchRes.Code
+				result["was"] = switchRes.Was
+				result["now"] = switchRes.Now
+				result["rolledBack"] = switchRes.RolledBack
+			}
+			writeJSON(w, result, status)
 			notify(hub, "switch.error", "failed to switch network stack", map[string]interface{}{
-				"request": payload,
-				"detail":  err.Error(),
-				"output":  out,
+				"request":    payload,
+				"detail":     err.Error(),
+				"output":     strings.TrimSpace(out),
+				"rolledBack": rolledBack,
 			})
 			return
 		}
 
 		result := map[string]interface{}{"ok": true, "output": out}
-		writeJSON(w, result, http.StatusOK)
-		notify(hub, "switch.ok", "network stack updated", map[string]interface{}{
+		notifyData := map[string]interface{}{
 			"request": payload,
 			"output":  strings.TrimSpace(out),
-		})
+		}
+		if switchRes != nil {
+			result["adapter"] = switchRes.Adapter
+			result["was"] = switchRes.Was
+			result["now"] = switchRes.Now
+			result["changed"] = switchRes.Changed
+			notifyData["was"] = switchRes.Was
+			notifyData["now"] = switchRes.Now
+			notifyData["changed"] = switchRes.Changed
+		}
+		writeJSON(w, result, http.StatusOK)
+		notify(hub, "switch.ok", "network stack updated", notifyData)
 	}
 }
 
