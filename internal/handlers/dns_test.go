@@ -182,3 +182,25 @@ func TestIsIPToken(t *testing.T) {
 		}
 	}
 }
+
+func TestDNSServersCovered(t *testing.T) {
+	tests := []struct {
+		name string
+		have []string
+		want []string
+		ok   bool
+	}{
+		{"exact match", []string{"202.204.60.10", "202.204.48.8"}, []string{"202.204.60.10", "202.204.48.8"}, true},
+		{"order independent", []string{"202.204.48.8", "202.204.60.10"}, []string{"202.204.60.10", "202.204.48.8"}, true},
+		{"case and whitespace", []string{" 202.204.60.10 ", "FE80::1"}, []string{"fe80::1", "202.204.60.10"}, true},
+		{"missing one", []string{"202.204.60.10"}, []string{"202.204.60.10", "202.204.48.8"}, false},
+		{"empty have", []string{}, []string{"202.204.60.10"}, false},
+		{"both empty", []string{}, []string{}, true},
+		{"extra entries are fine", []string{"10.0.0.1", "202.204.60.10"}, []string{"202.204.60.10"}, true},
+	}
+	for _, tc := range tests {
+		if got := dnsServersCovered(tc.have, tc.want); got != tc.ok {
+			t.Errorf("%s: dnsServersCovered = %v, want %v", tc.name, got, tc.ok)
+		}
+	}
+}

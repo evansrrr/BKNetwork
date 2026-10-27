@@ -60,7 +60,7 @@ func setDarwinAdapterDnsServers(serviceName string, servers []string) (string, e
 	defer cancel()
 	out, err := runDarwinAdminCommands(ctx, [][]string{args})
 	if err == nil {
-		time.Sleep(300 * time.Millisecond)
+		waitForDnsServers(ctx, serviceName, servers)
 	}
 	return out, err
 }
