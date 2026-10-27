@@ -40,16 +40,23 @@ func TestVersionMatchesDesktopPackage(t *testing.T) {
 
 // TestVersionMatchesShellMarkup covers the version the page shows before the
 // first status response arrives: index.html carries a placeholder that the UI
-// replaces from the API, so it has to be bumped with the rest.
+// replaces from the API, so it has to be bumped with the rest. The stylesheet
+// and script references carry the same version as a cache-busting query
+// parameter, so a new build cannot be masked by an old cached asset.
 func TestVersionMatchesShellMarkup(t *testing.T) {
 	path := filepath.Join("..", "..", "web", "index.html")
 	data, err := os.ReadFile(path)
 	if err != nil {
 		t.Skipf("web shell not available: %v", err)
 	}
-	want := ">v" + Version + "<"
-	if !bytes.Contains(data, []byte(want)) {
-		t.Fatalf("%s does not contain %q; bump the version placeholder together with buildinfo.Version", path, want)
+	for _, want := range []string{
+		">v" + Version + "<",
+		"styles.css?v=" + Version,
+		"app.js?v=" + Version,
+	} {
+		if !bytes.Contains(data, []byte(want)) {
+			t.Fatalf("%s does not contain %q; bump the version placeholder together with buildinfo.Version", path, want)
+		}
 	}
 }
 
