@@ -363,6 +363,7 @@ body.advanced-mode .site-footer { position: static; margin-top: auto; padding: 1
 .setting-copy { min-width: 0; }
 .setting-title { font-size: 14px; font-weight: 600; margin-bottom: 4px; }
 .setting-note { color: var(--fg-secondary); font-size: 12px; line-height: 1.5; }
+.dns-status { margin-top: 10px; color: var(--fg-secondary); font-size: 11px; min-height: 1.2em; }
 .settings-actions { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
 .settings-action { padding: 8px 14px; border-radius: 8px; border: 1px solid var(--line-strong); background: var(--bg-soft); color: var(--fg); font-size: 12px; font-weight: 600; cursor: pointer; transition: background var(--dur-fast) var(--ease); }
 .settings-action:hover { background: var(--accent-soft); border-color: var(--accent); }

@@ -26,7 +26,6 @@ const settingsCloseBtn = document.getElementById('settingsCloseBtn');
 const settingsDiagnosticsBtn = document.getElementById('settingsDiagnosticsBtn');
 const settingAutoStartEl = document.getElementById('settingAutoStart');
 const settingSilentStartEl = document.getElementById('settingSilentStart');
-const settingWarpAutoStartEl = document.getElementById('settingWarpAutoStart');
 const settingWarpAppAutoStartEl = document.getElementById('settingWarpAppAutoStart');
 const settingDisableOnlineChecksEl = document.getElementById('settingDisableOnlineChecks');
 const operationToastEl = document.getElementById('operationToast');
@@ -39,7 +38,6 @@ const appVersionEl = document.querySelector('.lead');
 const dnsIpv4InputEl = document.getElementById('dnsIpv4Input');
 const dnsIpv6InputEl = document.getElementById('dnsIpv6Input');
 const dnsStatusEl = document.getElementById('dnsStatus');
-const lastResultEl = document.getElementById('lastResult');
 const lastUpdatedEl = document.getElementById('lastUpdated');
 const trafficUsageEl = document.getElementById('trafficUsage');
 const adapterListEl = document.getElementById('adapterList');
@@ -474,7 +472,6 @@ function scheduleDeferredStartupTasks() {
 function syncSettingsControls() {
   if (settingAutoStartEl) settingAutoStartEl.checked = !!settingsState.autoStart;
   if (settingSilentStartEl) settingSilentStartEl.checked = !!settingsState.silentStart;
-  if (settingWarpAutoStartEl) settingWarpAutoStartEl.checked = !!settingsState.warpAutoStart;
   if (settingWarpAppAutoStartEl) settingWarpAppAutoStartEl.checked = !!settingsState.warpAppAutoStart;
   if (settingDisableOnlineChecksEl) settingDisableOnlineChecksEl.checked = !!settingsState.disableOnlineChecks;
 }
@@ -1434,14 +1431,12 @@ async function postAction(path, body) {
       body: JSON.stringify(body),
     });
     const data = await res.json();
-    setText(lastResultEl, JSON.stringify(data, null, 2));
     appendLog(`${path} -> ${data.ok ? 'ok' : 'error'}`);
     if (!res.ok) {
       throw new Error(data.error || 'request failed');
     }
     return data;
   } catch (err) {
-    setText(lastResultEl, err.message);
     appendLog(`请求失败：${err.message}`);
     throw err;
   } finally {
@@ -1456,7 +1451,6 @@ async function postActionSilently(path, body) {
     body: JSON.stringify(body),
   });
   const data = await res.json();
-  setText(lastResultEl, JSON.stringify(data, null, 2));
   appendLog(`${path} -> ${data.ok ? 'ok' : 'error'}`);
   if (!res.ok) {
     throw new Error(data.error || 'request failed');
@@ -1694,13 +1688,6 @@ if (settingSilentStartEl) {
   });
 }
 
-if (settingWarpAutoStartEl) {
-  settingWarpAutoStartEl.addEventListener('change', () => {
-    settingsState.warpAutoStart = settingWarpAutoStartEl.checked;
-    saveSettings();
-  });
-}
-
 if (settingWarpAppAutoStartEl) {
   settingWarpAppAutoStartEl.addEventListener('change', () => {
     settingsState.warpAppAutoStart = settingWarpAppAutoStartEl.checked;
@@ -1789,7 +1776,6 @@ function connectWS() {
       if (data.type === 'hello') {
         return;
       }
-      setText(lastResultEl, JSON.stringify(data, null, 2));
       appendLog(`${data.type} · ${data.message}`);
     } catch (err) {
       console.error('WebSocket 消息解析失败:', err);

@@ -14,7 +14,7 @@ concurrency:
 
 jobs:
   go:
-    name: Go tests
+    name: Go (linux, race detector)
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
@@ -26,8 +26,84 @@ jobs:
         run: |
           go fmt ./...
           git diff --exit-code -- '*.go'
-      - run: go test ./...
       - run: go vet ./...
+      - name: Tests with the race detector
+        run: go test -race -count=1 ./...
+      - name: Coverage
+        run: |
+          go test -count=1 -coverprofile=coverage.out -covermode=atomic ./internal/... > /dev/null
+          go tool cover -func=coverage.out | tail -1
+          total=$(go tool cover -func=coverage.out | tail -1 | awk '{print $3}' | tr -d '%')
+          echo "coverage=${total}%"
+          # Floor, not a target: it only stops a silent slide. Raise it as the
+          # suite grows rather than lowering it.
+          awk -v c="$total" 'BEGIN { if (c + 0 < 35) { printf "coverage %.1f%% is below the 35%% floor\n", c; exit 1 } }'
+      - uses: actions/upload-artifact@v4
+        with:
+          name: go-coverage
+          path: coverage.out
+          if-no-files-found: ignore
+      - run: go build ./...
+
+  go-windows:
+    name: Go (windows)
+    # Most of the logic is Windows only, so the suite runs here as well: the
+    # linux job above cannot even build the Windows specific files.
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-go@v6
+        with:
+          go-version-file: go.mod
+          cache-dependency-path: go.sum
+      - run: go vet ./...
+      - run: go test -count=1 ./...
+      - run: go build ./...
+      - name: The console/service entry point builds without a C toolchain
+        run: |
+          $env:CGO_ENABLED = "0"
+          go build -o bknetwork.exe ./cmd/bknetwork
+          go build -o bknetwork-sidecar.exe ./cmd/bknetwork-sidecar
+
+  frontend:
+    name: Frontend checks
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Syntax, CSP markup and element ids
+        run: node scripts/check-frontend.mjs
+
+  static-analysis:
+    name: Staticcheck (advisory)
+    runs-on: ubuntu-latest
+    # Advisory until the first green run on main; then drop continue-on-error so
+    # it gates. The linter could not be run locally while writing this (no
+    # network to the Go module proxy), so its baseline is not known yet.
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-go@v6
+        with:
+          go-version-file: go.mod
+          cache-dependency-path: go.sum
+      - run: go run honnef.co/go/tools/cmd/staticcheck@latest ./...
+
+  vulnerabilities:
+    name: govulncheck (advisory)
+    runs-on: ubuntu-latest
+    # Same reasoning as static-analysis: report first, gate later, so a new
+    # advisory in the standard library does not block an unrelated fix.
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-go@v6
+        with:
+          go-version-file: go.mod
+          cache-dependency-path: go.sum
+      - run: go run golang.org/x/vuln/cmd/govulncheck@latest ./...
 
   tauri:
     name: Tauri checks (${{ matrix.name }})

@@ -50,14 +50,6 @@ const (
 	timeoutLong   = 15 * time.Second
 )
 
-type apiResponse struct {
-	OK      bool        `json:"ok"`
-	Error   string      `json:"error,omitempty"`
-	Detail  string      `json:"detail,omitempty"`
-	Output  string      `json:"output,omitempty"`
-	Payload interface{} `json:"payload,omitempty"`
-}
-
 func writeJSON(w http.ResponseWriter, v interface{}, code int) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(code)
