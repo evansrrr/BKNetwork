@@ -28,7 +28,10 @@ var upgrader = websocket.Upgrader{
 }
 
 const (
-	timeoutDial   = 3 * time.Second
+	// timeoutDial bounds the connectivity probe inside the network snapshot.
+	// Every request used to wait for the slowest sub-probe, so a blocked
+	// cloudflare.com:443 dial cost the whole dashboard ~3s on first load.
+	timeoutDial   = 1200 * time.Millisecond
 	timeoutShort  = 5 * time.Second
 	timeoutMedium = 8 * time.Second
 	timeoutApply  = 12 * time.Second
@@ -132,6 +135,9 @@ func SwitchStackHandler(hub *events.Hub) http.HandlerFunc {
 		}
 
 		out, err := applyNetworkMode(payload.IfName, payload.Mode)
+		// The bindings changed (or were rolled back), so the cached snapshot is
+		// stale for the status poll that follows this request.
+		invalidateNetworkSnapshot()
 		if err != nil {
 			result := map[string]interface{}{
 				"error":  "command failed",
@@ -186,6 +192,8 @@ func WarpHandler(hub *events.Hub) http.HandlerFunc {
 		defer cancel()
 
 		out, err := applyWarpAction(ctx, payload.Action)
+		// The connection state feeds freeFlow in the snapshot.
+		invalidateNetworkSnapshot()
 		if err != nil && errors.Is(err, errUnknownWarpAction) {
 			writeJSON(w, map[string]string{"error": "unknown action"}, http.StatusBadRequest)
 			notify(hub, "warp.error", "unknown action", payload)
@@ -266,6 +274,7 @@ func DnsHandler(hub *events.Hub) http.HandlerFunc {
 		}
 
 		out, err := applyDnsServers(payload.IfName, payload.IPv4Servers, payload.IPv6Servers)
+		invalidateNetworkSnapshot()
 		if err != nil {
 			writeJSON(w, map[string]interface{}{"error": "command failed", "detail": err.Error(), "output": out}, http.StatusInternalServerError)
 			notify(hub, "dns.error", "failed to update dns servers", map[string]interface{}{
@@ -346,7 +355,7 @@ func WSHandler(hub *events.Hub) http.HandlerFunc {
 			log.Printf("ws write hello: %v", err)
 			return
 		}
-		snap, snapErr := collectNetworkSnapshot()
+		snap, snapErr := getNetworkSnapshot()
 		if snapErr != nil {
 			log.Printf("ws collect snapshot: %v", snapErr)
 		}
@@ -380,7 +389,7 @@ func StatusHandler(hub *events.Hub) http.HandlerFunc {
 		if adminErr != nil {
 			adminErrMsg = adminErr.Error()
 		}
-		network, _ := collectNetworkSnapshot()
+		network, _ := getNetworkSnapshot()
 		writeJSON(w, map[string]interface{}{
 			"service": map[string]interface{}{
 				"name":    "BKNetwork",
