@@ -64,16 +64,17 @@ func NewServer(addr string) *Server {
 	}
 
 	var handler http.Handler = mux
-	// The guard runs for every entry point, including the unauthenticated
-	// legacy one: it blocks DNS-rebinding (via Host) and cross-site browser
-	// requests (via Origin and Content-Type) before they reach any handler.
-	handler = guardHandler(handler, addr)
 	if token := strings.TrimSpace(os.Getenv("BKNETWORK_API_TOKEN")); token != "" {
 		handler = localAuthHandler(handler, token)
 	} else {
 		log.Println("warning: BKNETWORK_API_TOKEN is unset; the local API is unauthenticated " +
 			"(cross-site browser requests are still rejected, local processes are not)")
 	}
+	// The guard wraps the auth handler, so it runs for every entry point
+	// (including the unauthenticated legacy one) and before any credential is
+	// looked at: a DNS-rebinding or cross-site request is rejected as such
+	// instead of answering 401 and revealing whether a cookie would help.
+	handler = guardHandler(handler, addr)
 	handler = securityHeadersHandler(handler, addr)
 	// Outermost: every request, including one the guard rejects, carries an id
 	// that shows up in the response header and in the audit log.
