@@ -162,11 +162,13 @@ GOOS=windows GOARCH=amd64 go build -o bknetwork.exe ./cmd/bknetwork
 
 **单元测试与检查**
 
+前端为原生 ES 模块：入口 `web/app.js`，`web/js/` 下按依赖单向分层——`dom.js`（元素引用）→ `state.js`（共享状态）→ `ui.js`（渲染/同步）→ `api.js`（纯 fetch）→ `actions.js`（用户动作），入口负责事件绑定与 WebSocket。改动后运行以下检查，模块导入关系会被静态校验：
+
 ```bash
 cd BKNetwork
 go test ./...                       # 全部测试（无需管理员权限）
 go vet ./...                        # 静态检查
-node scripts/check-frontend.mjs     # 前端语法、CSP 内联限制、元素 id 一致性
+node scripts/check-frontend.mjs     # 前端模块语法、导入关系、CSP 内联限制、元素 id 一致性
 ```
 
 **GitHub CI/CD**

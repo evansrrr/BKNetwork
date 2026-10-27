@@ -33,14 +33,62 @@ function read(relative) {
 }
 
 const html = read('web/index.html');
-const js = read('web/app.js');
 const css = read('web/styles.css');
 
-// 1. Syntax
-try {
-  new vm.Script(js, { filename: 'web/app.js' });
-} catch (err) {
-  fail(`web/app.js does not parse: ${err.message}`);
+// The UI is a native ES module graph: app.js is the entry, js/*.js hold the
+// modules it imports. All checks below run over every file of the graph.
+const moduleFiles = ['web/app.js', 'web/js/dom.js', 'web/js/state.js', 'web/js/ui.js',
+  'web/js/api.js', 'web/js/actions.js'];
+const sources = new Map();
+for (const file of moduleFiles) {
+  sources.set(file, read(file));
+}
+
+// 1. Syntax. vm.Script does not know import/export, so the module syntax is
+// stripped first; the result still catches every other syntax error, and the
+// import graph itself is validated by actually loading it (see the end).
+const scriptish = (src) => src
+  .replace(/^import\s+\{[^}]*\}\s+from\s+'[^']*';\s*$/gm, '')
+  .replace(/^export\s+/gm, '');
+for (const [file, src] of sources) {
+  try {
+    new vm.Script(scriptish(src), { filename: file });
+  } catch (err) {
+    fail(`${file} does not parse: ${err.message}`);
+  }
+}
+
+// 1b. Every import specifier must point at a file of the graph (a typo or a
+// missing module otherwise only fails inside the browser).
+for (const [file, src] of sources) {
+  for (const match of src.matchAll(/^import\s+\{[^}]*\}\s+from\s+'([^']+)';\s*$/gm)) {
+    const resolved = file.startsWith('web/app.js')
+      ? 'web/' + match[1].replace('./', '')
+      : 'web/js/' + match[1].replace('./', '');
+    if (!sources.has(resolved)) {
+      fail(`${file} imports unknown module ${match[1]}`);
+    }
+  }
+}
+
+// 1c. Every imported binding must be exported by the module it comes from.
+const exportCache = new Map();
+for (const [file, src] of sources) {
+  exportCache.set(file, new Set(
+    [...src.matchAll(/^export (?:async )?(?:function|const) ([A-Za-z_$][\w$]*)/gm)].map(m => m[1])));
+}
+for (const [file, src] of sources) {
+  for (const match of src.matchAll(/^import\s+\{([^}]*)\}\s+from\s+'([^']+)';\s*$/gm)) {
+    const resolved = file.startsWith('web/app.js')
+      ? 'web/' + match[2].replace('./', '')
+      : 'web/js/' + match[2].replace('./', '');
+    const available = exportCache.get(resolved) || new Set();
+    for (const name of match[1].split(',').map(s => s.trim()).filter(Boolean)) {
+      if (!available.has(name)) {
+        fail(`${file} imports missing export ${name} from ${match[2]}`);
+      }
+    }
+  }
 }
 
 // 2. CSP-hostile markup
@@ -59,9 +107,11 @@ if (/<style[\s>]/i.test(html)) {
 }
 
 // 3. Dangerous or foreign code in the bundle
-for (const pattern of [/\beval\s*\(/, /new\s+Function\s*\(/]) {
-  if (pattern.test(js)) {
-    fail(`web/app.js uses ${pattern} (blocked by the CSP)`);
+for (const [file, src] of sources) {
+  for (const pattern of [/\beval\s*\(/, /new\s+Function\s*\(/]) {
+    if (pattern.test(src)) {
+      fail(`${file} uses ${pattern} (blocked by the CSP)`);
+    }
   }
 }
 
@@ -80,20 +130,22 @@ for (const className of ['.section--spaced', '.section--spaced-sm']) {
   }
 }
 
-// 4. Element ids referenced from app.js must exist in index.html (a typo in a
-// getElementById call is otherwise a silent no-op).
+// 4. Element ids referenced from any module must exist in index.html (a typo
+// in a getElementById call is otherwise a silent no-op).
 const ids = new Set();
 for (const match of html.matchAll(/\sid="([^"]+)"/g)) {
   ids.add(match[1]);
 }
 const missing = new Set();
-for (const match of js.matchAll(/getElementById\(['"]([^'"]+)['"]\)/g)) {
-  if (!ids.has(match[1])) {
-    missing.add(match[1]);
+for (const src of sources.values()) {
+  for (const match of src.matchAll(/getElementById\(['"]([^'"]+)['"]\)/g)) {
+    if (!ids.has(match[1])) {
+      missing.add(match[1]);
+    }
   }
 }
 if (missing.size > 0) {
-  fail(`app.js refers to missing element ids: ${[...missing].sort().join(', ')}`);
+  fail(`modules refer to missing element ids: ${[...missing].sort().join(', ')}`);
 }
 
 if (problems.length > 0) {
