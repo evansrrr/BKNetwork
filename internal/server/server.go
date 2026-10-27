@@ -50,6 +50,7 @@ func NewServer(addr string) *Server {
 	mux.HandleFunc("/api/v1/settings", handlers.SettingsHandler(hub))
 	mux.HandleFunc("/api/v1/status", handlers.StatusHandler(hub))
 	mux.HandleFunc("/api/v1/version/latest", handlers.LatestVersionHandler())
+	mux.HandleFunc("/api/v1/diagnostics", handlers.DiagnosticsHandler())
 	mux.HandleFunc("/ws", handlers.WSHandler(hub, loopbackOrigins(listenPort(addr), "http")))
 	// Unknown /api paths must not fall through to the static file handler, which
 	// used to answer them with index.html and status 200.
@@ -74,6 +75,9 @@ func NewServer(addr string) *Server {
 			"(cross-site browser requests are still rejected, local processes are not)")
 	}
 	handler = securityHeadersHandler(handler, addr)
+	// Outermost: every request, including one the guard rejects, carries an id
+	// that shows up in the response header and in the audit log.
+	handler = requestIDHandler(handler)
 
 	return &Server{
 		hub:   hub,
@@ -91,6 +95,22 @@ func NewServer(addr string) *Server {
 			// short. Handlers bound themselves instead.
 		},
 	}
+}
+
+// requestIDHandler gives every request an id and echoes it in X-Request-Id, so a
+// user can quote one token and the matching audit lines can be found in the log.
+func requestIDHandler(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		id := strings.TrimSpace(r.Header.Get("X-Request-Id"))
+		if len(id) < 8 || len(id) > 64 {
+			id = handlers.NewRequestID()
+		}
+		if id != "" {
+			w.Header().Set("X-Request-Id", id)
+			r = r.WithContext(handlers.WithRequestID(r.Context(), id))
+		}
+		next.ServeHTTP(w, r)
+	})
 }
 
 func localAuthHandler(next http.Handler, token string) http.Handler {

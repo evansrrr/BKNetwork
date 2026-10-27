@@ -4,6 +4,8 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"strconv"
+	"strings"
 
 	"bknetwork/internal/events"
 	appsettings "bknetwork/internal/settings"
@@ -143,6 +145,7 @@ func settingsHandler(hub *events.Hub, deps settingsDeps, effects settingsSideEff
 			next := payload.toSettings()
 			result, err := applySettingsChange(prevCfg, next, effects, deps.save)
 			if err != nil {
+				audit(r, "settings", map[string]string{"ok": "false", "detail": err.Error()})
 				notify(hub, "settings.error", "failed to update settings", map[string]any{"detail": err.Error()})
 				writeJSON(w, map[string]any{"error": "settings update failed", "detail": err.Error()}, http.StatusInternalServerError)
 				return
@@ -151,6 +154,18 @@ func settingsHandler(hub *events.Hub, deps settingsDeps, effects settingsSideEff
 			if loadErr != nil {
 				result.Warning = loadErr.Error()
 			}
+			applied := strings.Join(result.Applied, ",")
+			if applied == "" {
+				applied = "none"
+			}
+			audit(r, "settings", map[string]string{
+				"applied":          applied,
+				"autoStart":        strconv.FormatBool(next.AutoStart),
+				"silentStart":      strconv.FormatBool(next.SilentStart),
+				"warpAutoStart":    strconv.FormatBool(next.WarpAutoStart),
+				"warpAppAutoStart": strconv.FormatBool(next.WarpAppAutoStart),
+				"ok":               "true",
+			})
 			notify(hub, "settings.ok", "settings updated", snapshotOf(next))
 			writeJSON(w, map[string]any{
 				"ok":       true,

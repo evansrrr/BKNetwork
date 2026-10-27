@@ -7,6 +7,7 @@ import (
 	"log"
 	"net/http"
 	"os/exec"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -162,13 +163,23 @@ func SwitchStackHandler(hub *events.Hub) http.HandlerFunc {
 				"output": out,
 			}
 			rolledBack := false
+			code := ""
 			if switchRes != nil {
 				rolledBack = switchRes.RolledBack
+				code = switchRes.Code
 				result["code"] = switchRes.Code
 				result["was"] = switchRes.Was
 				result["now"] = switchRes.Now
 				result["rolledBack"] = switchRes.RolledBack
 			}
+			audit(r, "switch", map[string]string{
+				"ifName":     payload.IfName,
+				"mode":       payload.Mode,
+				"ok":         "false",
+				"code":       code,
+				"rolledBack": strconv.FormatBool(rolledBack),
+				"detail":     err.Error(),
+			})
 			writeJSON(w, result, status)
 			notify(hub, "switch.error", "failed to switch network stack", map[string]interface{}{
 				"request":    payload,
@@ -184,7 +195,9 @@ func SwitchStackHandler(hub *events.Hub) http.HandlerFunc {
 			"request": payload,
 			"output":  strings.TrimSpace(out),
 		}
+		changed := 0
 		if switchRes != nil {
+			changed = len(switchRes.Changed)
 			result["adapter"] = switchRes.Adapter
 			result["was"] = switchRes.Was
 			result["now"] = switchRes.Now
@@ -193,6 +206,12 @@ func SwitchStackHandler(hub *events.Hub) http.HandlerFunc {
 			notifyData["now"] = switchRes.Now
 			notifyData["changed"] = switchRes.Changed
 		}
+		audit(r, "switch", map[string]string{
+			"ifName":  payload.IfName,
+			"mode":    payload.Mode,
+			"ok":      "true",
+			"changed": strconv.Itoa(changed),
+		})
 		writeJSON(w, result, http.StatusOK)
 		notify(hub, "switch.ok", "network stack updated", notifyData)
 	}
@@ -240,6 +259,11 @@ func WarpHandler(hub *events.Hub) http.HandlerFunc {
 		}
 
 		if err != nil {
+			audit(r, "warp", map[string]string{
+				"action": payload.Action,
+				"ok":     "false",
+				"detail": err.Error(),
+			})
 			result := map[string]interface{}{"error": "warp error", "detail": err.Error(), "output": out}
 			writeJSON(w, result, http.StatusInternalServerError)
 			notify(hub, "warp.error", "failed to update warp state", map[string]interface{}{
@@ -252,6 +276,11 @@ func WarpHandler(hub *events.Hub) http.HandlerFunc {
 
 		warpProbe := probeWarpStatus(ctx)
 
+		audit(r, "warp", map[string]string{
+			"action":    payload.Action,
+			"ok":        "true",
+			"connected": strconv.FormatBool(warpProbe.Connected),
+		})
 		result := map[string]interface{}{"ok": true, "output": out, "connected": warpProbe.Connected, "status": warpProbe.Status}
 		writeJSON(w, result, http.StatusOK)
 		notify(hub, "warp.ok", "warp state updated", map[string]interface{}{
@@ -317,6 +346,11 @@ func DnsHandler(hub *events.Hub) http.HandlerFunc {
 		out, err := applyDnsServers(payload.IfName, payload.IPv4Servers, payload.IPv6Servers)
 		invalidateNetworkSnapshot()
 		if err != nil {
+			audit(r, "dns", map[string]string{
+				"ifName": payload.IfName,
+				"ok":     "false",
+				"detail": err.Error(),
+			})
 			writeJSON(w, map[string]interface{}{"error": "command failed", "detail": err.Error(), "output": out}, http.StatusInternalServerError)
 			notify(hub, "dns.error", "failed to update dns servers", map[string]interface{}{
 				"request": payload,
@@ -326,6 +360,12 @@ func DnsHandler(hub *events.Hub) http.HandlerFunc {
 			return
 		}
 
+		audit(r, "dns", map[string]string{
+			"ifName": payload.IfName,
+			"ipv4":   describeDnsServers(payload.IPv4Servers),
+			"ipv6":   describeDnsServers(payload.IPv6Servers),
+			"ok":     "true",
+		})
 		writeJSON(w, map[string]interface{}{"ok": true, "output": out}, http.StatusOK)
 		notify(hub, "dns.ok", "dns servers updated", map[string]interface{}{
 			"request": payload,
