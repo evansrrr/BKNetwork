@@ -158,7 +158,7 @@ GOOS=windows GOARCH=amd64 go build -o bknetwork.exe ./cmd/bknetwork
 - Windows：`%LOCALAPPDATA%\BKNetwork\logs\bknetwork-YYYYMMDD.log`（单文件超过 2 MiB 时轮转为 `.log.1`）
 - macOS：`~/Library/Caches/BKNetwork/logs/`（同样的文件名规则）
 - 每写入一次 IP 栈切换、DNS 修改、设置修改、WARP 操作都会记录一行 `AUDIT action=...`，并带上本次请求的 `requestId`（同时出现在响应的 `X-Request-Id` 头里），报障时提供这个 id 即可定位对应日志
-- 设置面板里的「导出诊断信息」会下载一份 JSON：版本、系统、日志尾部 300 行、当前设置与网络快照；也可以直接访问 `GET /api/v1/diagnostics`
+- 设置面板里的「导出诊断信息」会打开系统保存对话框让用户选择位置（旧 WebView 不支持时回退为直接下载）：版本、系统、日志尾部 300 行、当前设置与网络快照；也可以直接访问 `GET /api/v1/diagnostics`
 
 **单元测试与检查**
 

@@ -158,15 +158,12 @@ export async function exportDiagnostics() {
     }
     const data = await res.json();
     const stamp = new Date().toISOString().replace(/[:.]/g, '-');
+    const filename = `bknetwork-diagnostics-${stamp}.json`;
     const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement('a');
-    link.href = url;
-    link.download = `bknetwork-diagnostics-${stamp}.json`;
-    document.body.appendChild(link);
-    link.click();
-    link.remove();
-    window.setTimeout(() => URL.revokeObjectURL(url), 1000);
+    const saved = await saveBlobWithPicker(blob, filename);
+    if (!saved) {
+      return;
+    }
     setSettingsStatus('诊断信息已导出');
     appendLog('诊断信息已导出');
   } catch (err) {
@@ -175,6 +172,44 @@ export async function exportDiagnostics() {
   } finally {
     settingsDiagnosticsBtn.disabled = false;
   }
+}
+
+// saveBlobWithPicker asks the user where to put the file through the File
+// System Access API (WebView2 ships a native save dialog for it) and falls
+// back to the classic download flow when the picker is unavailable. Returns
+// false only when the user closed the dialog without saving.
+async function saveBlobWithPicker(blob, filename) {
+  if (typeof window.showSaveFilePicker !== 'function') {
+    downloadViaAnchor(blob, filename);
+    return true;
+  }
+  try {
+    const handle = await window.showSaveFilePicker({
+      suggestedName: filename,
+      types: [{ description: 'JSON', accept: { 'application/json': ['.json'] } }],
+    });
+    const writable = await handle.createWritable();
+    await writable.write(blob);
+    await writable.close();
+    return true;
+  } catch (err) {
+    if (err && err.name === 'AbortError') {
+      return false;
+    }
+    downloadViaAnchor(blob, filename);
+    return true;
+  }
+}
+
+function downloadViaAnchor(blob, filename) {
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement('a');
+  link.href = url;
+  link.download = filename;
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  window.setTimeout(() => URL.revokeObjectURL(url), 1000);
 }
 
 export async function applyDns64Mode(enabled) {
