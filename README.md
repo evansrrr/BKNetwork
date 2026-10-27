@@ -182,9 +182,9 @@ node scripts/check-frontend.mjs     # 前端语法、CSP 内联限制、元素 i
 - `.github/workflows/release.yml`：推送与 Cargo 版本一致的 `vX.Y.Z` 标签后，自动创建 GitHub Release，发布 Windows x64 NSIS、macOS Apple Silicon DMG 和 macOS Intel DMG。
 
 ```bash
-# 例：src-tauri/Cargo.toml 已更新为 1.1.0
-git tag v1.1.0
-git push origin v1.1.0
+# 例：src-tauri/Cargo.toml 与 internal/buildinfo/version.go 都已更新为 1.2.0
+git tag v1.2.0
+git push origin v1.2.0
 ```
 
 ## 免责声明
