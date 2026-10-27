@@ -3,6 +3,7 @@ package server
 import (
 	"context"
 	"crypto/subtle"
+	"errors"
 	"fmt"
 	"log"
 	"mime"
@@ -14,6 +15,7 @@ import (
 	"path/filepath"
 	"strings"
 	"syscall"
+	"time"
 
 	"bknetwork/internal/events"
 	"bknetwork/internal/handlers"
@@ -67,8 +69,16 @@ func NewServer(addr string) *Server {
 	return &Server{
 		hub: hub,
 		httpServer: &http.Server{
-			Addr:    addr,
-			Handler: handler,
+			Addr:              addr,
+			Handler:           handler,
+			ReadHeaderTimeout: 5 * time.Second,
+			ReadTimeout:       15 * time.Second,
+			IdleTimeout:       90 * time.Second,
+			MaxHeaderBytes:    64 << 10,
+			// No WriteTimeout on purpose: switching stacks and the macOS
+			// authorization prompt legitimately take tens of seconds, and a
+			// write timeout would cut the response (and the rollback report)
+			// short. Handlers bound themselves instead.
 		},
 	}
 }
@@ -293,6 +303,10 @@ func isDir(path string) bool {
 	return err == nil && info.IsDir()
 }
 
+// shutdownTimeout bounds an orderly shutdown. Handlers can legitimately run for
+// tens of seconds, but a stuck shutdown must not keep the process alive forever.
+const shutdownTimeout = 10 * time.Second
+
 func (s *Server) Start(ctx context.Context) error {
 	// Start server and listen for termination signals
 	lnErr := make(chan error, 1)
@@ -303,18 +317,33 @@ func (s *Server) Start(ctx context.Context) error {
 
 	sig := make(chan os.Signal, 1)
 	signal.Notify(sig, syscall.SIGINT, syscall.SIGTERM)
+	// Start can be called repeatedly in tests; drop the registration again.
+	defer signal.Stop(sig)
 
 	select {
 	case <-ctx.Done():
-		return s.Shutdown(context.Background())
+		return s.shutdown()
 	case err := <-lnErr:
 		if err != nil && err != http.ErrServerClosed {
 			return fmt.Errorf("http listen error: %w", err)
 		}
 	case <-sig:
-		return s.Shutdown(context.Background())
+		return s.shutdown()
 	}
 	return nil
+}
+
+// shutdown stops the listener and waits for in-flight handlers, but never
+// longer than shutdownTimeout (the previous context.Background() had no
+// deadline and could hang the process during exit).
+func (s *Server) shutdown() error {
+	ctx, cancel := context.WithTimeout(context.Background(), shutdownTimeout)
+	defer cancel()
+	err := s.Shutdown(ctx)
+	if errors.Is(err, context.DeadlineExceeded) {
+		log.Printf("shutdown timed out after %s; in-flight handlers were abandoned", shutdownTimeout)
+	}
+	return err
 }
 
 func (s *Server) Shutdown(ctx context.Context) error {

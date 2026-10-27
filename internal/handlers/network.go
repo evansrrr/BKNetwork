@@ -162,6 +162,8 @@ func applyNetworkMode(ifName, mode string) (*switchResult, string, error) {
 	}
 
 	script := buildSwitchScript(ifName, wantIPv4, wantIPv6)
+	// Deliberately not derived from the request context: the script has to be
+	// allowed to finish its rollback even if the client is already gone.
 	ctx, cancel := context.WithTimeout(context.Background(), timeoutSwitch)
 	defer cancel()
 
