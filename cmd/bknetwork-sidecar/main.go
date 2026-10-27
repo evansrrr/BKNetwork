@@ -33,7 +33,12 @@ func main() {
 		go syncAutostart(cfg)
 		go startWarpIfEnabled(cfg)
 	case err := <-serverDone:
-		log.Fatal(err)
+		// A shutdown signal can arrive before the listener is up; that is a clean
+		// exit, not a fatal error.
+		if err != nil {
+			log.Fatal(err)
+		}
+		return
 	}
 
 	if err := <-serverDone; err != nil {
