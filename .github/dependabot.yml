@@ -1,0 +1,30 @@
+version: 2
+updates:
+  # Go modules: one grouped PR per week instead of one per dependency.
+  - package-ecosystem: gomod
+    directory: /
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 3
+    groups:
+      go:
+        patterns: ['*']
+
+  # Tauri/Rust crates (the desktop shell).
+  - package-ecosystem: cargo
+    directory: /src-tauri
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 3
+    groups:
+      rust:
+        patterns: ['*']
+
+  # Actions themselves drift (and a pinned old action stops receiving fixes).
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: monthly
+    groups:
+      actions:
+        patterns: ['*']

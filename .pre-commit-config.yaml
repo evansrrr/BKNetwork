@@ -7,3 +7,17 @@ repos:
         language: system
         files: \.go$
         stages: [pre-commit]
+      - id: go-vet
+        name: go vet
+        entry: go vet ./...
+        language: system
+        files: \.go$
+        pass_filenames: false
+        stages: [pre-commit]
+      - id: frontend-checks
+        name: frontend checks (syntax, CSP markup, element ids)
+        entry: node scripts/check-frontend.mjs
+        language: system
+        files: ^web/.*\.(js|html|css)$
+        pass_filenames: false
+        stages: [pre-commit]
