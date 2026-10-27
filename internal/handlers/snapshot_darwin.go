@@ -41,7 +41,7 @@ func collectDarwinNetworkSnapshot() (networkSnapshot, error) {
 	}()
 	go func() {
 		defer wg.Done()
-		tcpProbe = probeCloudflareTCP(ctx)
+		tcpProbe = cachedCloudflareTCP(ctx)
 	}()
 
 	adapters := make([]adapterSnapshot, 0, len(services))
