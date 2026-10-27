@@ -1558,6 +1558,14 @@ window.addEventListener('keydown', (event) => {
 });
 
 let activeWs = null;
+let wsReconnectAttempt = 0;
+
+// 指数退避 + 抖动：服务重启或崩溃时不要每 2 秒集中重连一次
+function nextReconnectDelay() {
+  const base = Math.min(30000, 1000 * 2 ** wsReconnectAttempt);
+  wsReconnectAttempt = Math.min(wsReconnectAttempt + 1, 5);
+  return Math.round(base * (0.5 + Math.random() * 0.5));
+}
 
 function connectWS() {
   const scheme = location.protocol === 'https:' ? 'wss' : 'ws';
@@ -1565,6 +1573,7 @@ function connectWS() {
   activeWs = ws;
 
   ws.addEventListener('open', () => {
+    wsReconnectAttempt = 0;
     setBackendBadge('ok');
     appendLog('WebSocket 已连接');
   });
@@ -1629,8 +1638,9 @@ function connectWS() {
       activeWs = null;
     }
     setBackendBadge('err');
-    appendLog('WebSocket 已断开，准备重连');
-    setTimeout(connectWS, 2000);
+    const delay = nextReconnectDelay();
+    appendLog(`WebSocket 已断开，${Math.round(delay / 1000)}s 后重连`);
+    setTimeout(connectWS, delay);
   });
 
   ws.addEventListener('error', () => {
