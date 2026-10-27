@@ -513,24 +513,3 @@ func StatusHandler(hub *events.Hub) http.HandlerFunc {
 		}, http.StatusOK)
 	}
 }
-
-func LatestVersionHandler() http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
-		if r.Method != http.MethodGet {
-			writeJSON(w, map[string]string{"error": "method not allowed"}, http.StatusMethodNotAllowed)
-			return
-		}
-
-		ctx, cancel := context.WithTimeout(r.Context(), timeoutMedium)
-		defer cancel()
-
-		tag, err := fetchLatestReleaseTag(ctx)
-		if err != nil {
-			log.Printf("latest version check failed: %v", err)
-			writeJSON(w, map[string]interface{}{"ok": true, "tag": ""}, http.StatusOK)
-			return
-		}
-
-		writeJSON(w, map[string]interface{}{"ok": true, "tag": tag}, http.StatusOK)
-	}
-}

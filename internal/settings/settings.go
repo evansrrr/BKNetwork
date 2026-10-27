@@ -18,6 +18,10 @@ type Settings struct {
 	SilentStart      bool `json:"silentStart"`
 	WarpAutoStart    bool `json:"warpAutoStart"`
 	WarpAppAutoStart bool `json:"warpAppAutoStart"`
+	// DisableOnlineChecks turns off the outbound requests the app makes on its
+	// own (GitHub version check, public IPv6 echo). Campus and restricted
+	// networks block or throttle them, and a failing check only produces noise.
+	DisableOnlineChecks bool `json:"disableOnlineChecks"`
 }
 
 var mu sync.Mutex

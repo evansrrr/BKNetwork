@@ -13,27 +13,30 @@ import (
 
 // settingsSnapshot is the wire format of /api/v1/settings.
 type settingsSnapshot struct {
-	AutoStart        bool `json:"autoStart"`
-	SilentStart      bool `json:"silentStart"`
-	WarpAutoStart    bool `json:"warpAutoStart"`
-	WarpAppAutoStart bool `json:"warpAppAutoStart"`
+	AutoStart           bool `json:"autoStart"`
+	SilentStart         bool `json:"silentStart"`
+	WarpAutoStart       bool `json:"warpAutoStart"`
+	WarpAppAutoStart    bool `json:"warpAppAutoStart"`
+	DisableOnlineChecks bool `json:"disableOnlineChecks"`
 }
 
 func (s settingsSnapshot) toSettings() appsettings.Settings {
 	return appsettings.Settings{
-		AutoStart:        s.AutoStart,
-		SilentStart:      s.SilentStart,
-		WarpAutoStart:    s.WarpAutoStart,
-		WarpAppAutoStart: s.WarpAppAutoStart,
+		AutoStart:           s.AutoStart,
+		SilentStart:         s.SilentStart,
+		WarpAutoStart:       s.WarpAutoStart,
+		WarpAppAutoStart:    s.WarpAppAutoStart,
+		DisableOnlineChecks: s.DisableOnlineChecks,
 	}
 }
 
 func snapshotOf(cfg appsettings.Settings) settingsSnapshot {
 	return settingsSnapshot{
-		AutoStart:        cfg.AutoStart,
-		SilentStart:      cfg.SilentStart,
-		WarpAutoStart:    cfg.WarpAutoStart,
-		WarpAppAutoStart: cfg.WarpAppAutoStart,
+		AutoStart:           cfg.AutoStart,
+		SilentStart:         cfg.SilentStart,
+		WarpAutoStart:       cfg.WarpAutoStart,
+		WarpAppAutoStart:    cfg.WarpAppAutoStart,
+		DisableOnlineChecks: cfg.DisableOnlineChecks,
 	}
 }
 
@@ -159,12 +162,13 @@ func settingsHandler(hub *events.Hub, deps settingsDeps, effects settingsSideEff
 				applied = "none"
 			}
 			audit(r, "settings", map[string]string{
-				"applied":          applied,
-				"autoStart":        strconv.FormatBool(next.AutoStart),
-				"silentStart":      strconv.FormatBool(next.SilentStart),
-				"warpAutoStart":    strconv.FormatBool(next.WarpAutoStart),
-				"warpAppAutoStart": strconv.FormatBool(next.WarpAppAutoStart),
-				"ok":               "true",
+				"applied":             applied,
+				"autoStart":           strconv.FormatBool(next.AutoStart),
+				"silentStart":         strconv.FormatBool(next.SilentStart),
+				"warpAutoStart":       strconv.FormatBool(next.WarpAutoStart),
+				"warpAppAutoStart":    strconv.FormatBool(next.WarpAppAutoStart),
+				"disableOnlineChecks": strconv.FormatBool(next.DisableOnlineChecks),
+				"ok":                  "true",
 			})
 			notify(hub, "settings.ok", "settings updated", snapshotOf(next))
 			writeJSON(w, map[string]any{
