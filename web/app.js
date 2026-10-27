@@ -28,6 +28,7 @@ const settingAutoStartEl = document.getElementById('settingAutoStart');
 const settingSilentStartEl = document.getElementById('settingSilentStart');
 const settingWarpAutoStartEl = document.getElementById('settingWarpAutoStart');
 const settingWarpAppAutoStartEl = document.getElementById('settingWarpAppAutoStart');
+const settingDisableOnlineChecksEl = document.getElementById('settingDisableOnlineChecks');
 const operationToastEl = document.getElementById('operationToast');
 const operationToastTitleEl = document.getElementById('operationToastTitle');
 const operationToastDescEl = document.getElementById('operationToastDesc');
@@ -59,6 +60,8 @@ const settingsState = {
   silentStart: false,
   warpAutoStart: false,
   warpAppAutoStart: false,
+  disableOnlineChecks: false,
+  loaded: false,
   saving: false,
 };
 const operationToastState = {
@@ -428,6 +431,13 @@ async function fetchLatestReleaseTag() {
 }
 
 async function checkForNewVersion() {
+  if (!settingsState.loaded) {
+    await loadSettings().catch(() => {});
+  }
+  if (settingsState.disableOnlineChecks) {
+    return;
+  }
+
   const currentVersion = getCurrentVersionText();
   if (!currentVersion) {
     return;
@@ -466,6 +476,7 @@ function syncSettingsControls() {
   if (settingSilentStartEl) settingSilentStartEl.checked = !!settingsState.silentStart;
   if (settingWarpAutoStartEl) settingWarpAutoStartEl.checked = !!settingsState.warpAutoStart;
   if (settingWarpAppAutoStartEl) settingWarpAppAutoStartEl.checked = !!settingsState.warpAppAutoStart;
+  if (settingDisableOnlineChecksEl) settingDisableOnlineChecksEl.checked = !!settingsState.disableOnlineChecks;
 }
 
 function setSettingsOpen(open) {
@@ -486,6 +497,8 @@ async function loadSettings() {
     settingsState.silentStart = !!data.silentStart;
     settingsState.warpAutoStart = !!data.warpAutoStart;
     settingsState.warpAppAutoStart = !!data.warpAppAutoStart;
+    settingsState.disableOnlineChecks = !!data.disableOnlineChecks;
+    settingsState.loaded = true;
     syncSettingsControls();
     if (data.warning) {
       // 配置文件损坏时后端返回默认值 + warning，保存一次即可修复
@@ -519,6 +532,7 @@ async function saveSettings() {
         silentStart: !!settingsState.silentStart,
         warpAutoStart: !!settingsState.warpAutoStart,
         warpAppAutoStart: !!settingsState.warpAppAutoStart,
+        disableOnlineChecks: !!settingsState.disableOnlineChecks,
       }),
     });
     const data = await res.json();
@@ -996,17 +1010,56 @@ async function fetchIpv6AddressOnce() {
   }
 }
 
+// 本地快照里已有的全局 IPv6 地址足以判断免流是否可用，不必再问公网回显服务。
+function findLocalIpv6Address(network) {
+  for (const adapter of network?.adapters || []) {
+    for (const address of adapter.ipv6 || []) {
+      const value = String(address || '').trim();
+      if (!value || value.startsWith('fe80:') || value.startsWith('::1')) {
+        continue;
+      }
+      return value;
+    }
+  }
+  return '';
+}
+
+async function loadNetworkForLocalCheck() {
+  if (latestNetwork) {
+    return latestNetwork;
+  }
+  try {
+    const res = await fetch('/api/v1/status', { cache: 'no-store' });
+    const data = await res.json();
+    return data?.network || null;
+  } catch (_) {
+    return null;
+  }
+}
+
 async function checkIpv6Address() {
   setIpv6CheckStatus('warn', '正在检测 IPv6 地址...');
+
+  const local = findLocalIpv6Address(await loadNetworkForLocalCheck());
+  if (local) {
+    setIpv6CheckStatus('ok', local);
+    return local;
+  }
+
+  if (settingsState.disableOnlineChecks) {
+    setIpv6CheckStatus('warn', '未发现 IPv6 地址（已关闭联网检查）');
+    return null;
+  }
+
   let lastError = null;
-  for (let attempt = 1; attempt <= 3; attempt += 1) {
+  for (let attempt = 1; attempt <= 2; attempt += 1) {
     try {
       const ipv6 = await fetchIpv6AddressOnce();
       setIpv6CheckStatus('ok', ipv6);
       return ipv6;
     } catch (err) {
       lastError = err;
-      if (attempt < 3) {
+      if (attempt < 2) {
         await delay(800);
       }
     }
@@ -1651,6 +1704,13 @@ if (settingWarpAutoStartEl) {
 if (settingWarpAppAutoStartEl) {
   settingWarpAppAutoStartEl.addEventListener('change', () => {
     settingsState.warpAppAutoStart = settingWarpAppAutoStartEl.checked;
+    saveSettings();
+  });
+}
+
+if (settingDisableOnlineChecksEl) {
+  settingDisableOnlineChecksEl.addEventListener('change', () => {
+    settingsState.disableOnlineChecks = settingDisableOnlineChecksEl.checked;
     saveSettings();
   });
 }
