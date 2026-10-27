@@ -44,7 +44,7 @@ func NewServer(addr string) *Server {
 	mux.HandleFunc("/api/v1/settings", handlers.SettingsHandler(hub))
 	mux.HandleFunc("/api/v1/status", handlers.StatusHandler(hub))
 	mux.HandleFunc("/api/v1/version/latest", handlers.LatestVersionHandler())
-	mux.HandleFunc("/ws", handlers.WSHandler(hub))
+	mux.HandleFunc("/ws", handlers.WSHandler(hub, loopbackOrigins(portOfAddr(addr), "http")))
 
 	// static files: prefer the executable directory, then the current working directory.
 	if webDir, ok := resolveWebDir(); ok {
@@ -203,18 +203,25 @@ func securityHeadersHandler(next http.Handler, addr string) http.Handler {
 
 // contentSecurityPolicy builds the policy for the UI served on port. The
 // WebSocket origins have to be listed explicitly: 'self' does not cover ws://.
-func contentSecurityPolicy(port string) string {
+// loopbackOrigins lists the origins this server may be reached from. Both the
+// WebSocket origin check and the CSP are derived from it, so a non default
+// listen port works without touching either.
+func loopbackOrigins(port, scheme string) []string {
 	if strings.TrimSpace(port) == "" {
 		port = "13335"
 	}
-	connect := []string{
-		"'self'",
-		"http://127.0.0.1:" + port,
-		"http://localhost:" + port,
-		"ws://127.0.0.1:" + port,
-		"ws://localhost:" + port,
-		ipv6ProbeOrigin,
+	return []string{
+		scheme + "://127.0.0.1:" + port,
+		scheme + "://localhost:" + port,
+		scheme + "://[::1]:" + port,
 	}
+}
+
+func contentSecurityPolicy(port string) string {
+	connect := []string{"'self'"}
+	connect = append(connect, loopbackOrigins(port, "http")...)
+	connect = append(connect, loopbackOrigins(port, "ws")...)
+	connect = append(connect, ipv6ProbeOrigin)
 	directives := []string{
 		"default-src 'self'",
 		"base-uri 'none'",

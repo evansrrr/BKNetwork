@@ -20,6 +20,11 @@ var testWSKeepalive = wsKeepalive{
 	pingPeriod: 100 * time.Millisecond,
 }
 
+// testUpgrader accepts the production origin, which is what dialWS sends.
+func testUpgrader() websocket.Upgrader {
+	return newWSUpgrader([]string{"http://127.0.0.1:13335", "http://localhost:13335"})
+}
+
 // dialWS connects to the test server. The origin is set to the production
 // origin because the upgrader only accepts that one.
 func dialWS(t *testing.T, serverURL string) *websocket.Conn {
@@ -51,7 +56,7 @@ func TestWSHandlerSendsSnapshotThenEvents(t *testing.T) {
 	snapshot := func() (networkSnapshot, error) {
 		return networkSnapshot{CollectedAt: "2026-10-27T00:00:00Z"}, nil
 	}
-	server := httptest.NewServer(wsHandler(hub, snapshot, testWSKeepalive))
+	server := httptest.NewServer(wsHandler(hub, snapshot, testWSKeepalive, testUpgrader()))
 	defer server.Close()
 
 	conn := dialWS(t, server.URL)
@@ -80,7 +85,7 @@ func TestWSHandlerKeepsResponsiveClientAlive(t *testing.T) {
 	hub := events.NewHub()
 	server := httptest.NewServer(wsHandler(hub, func() (networkSnapshot, error) {
 		return networkSnapshot{}, nil
-	}, testWSKeepalive))
+	}, testWSKeepalive, testUpgrader()))
 	defer server.Close()
 
 	conn := dialWS(t, server.URL)
@@ -127,7 +132,7 @@ func TestWSHandlerDropsSilentClient(t *testing.T) {
 	hub := events.NewHub()
 	server := httptest.NewServer(wsHandler(hub, func() (networkSnapshot, error) {
 		return networkSnapshot{}, nil
-	}, testWSKeepalive))
+	}, testWSKeepalive, testUpgrader()))
 	defer server.Close()
 
 	conn := dialWS(t, server.URL)
@@ -151,4 +156,48 @@ func TestWSHandlerDropsSilentClient(t *testing.T) {
 func isTimeout(err error) bool {
 	netErr, ok := err.(interface{ Timeout() bool })
 	return ok && netErr.Timeout()
+}
+
+// TestWSHandlerRejectsForeignOrigin pins the per-server origin list: a foreign
+// page must not be able to open a socket to the local API.
+func TestWSHandlerRejectsForeignOrigin(t *testing.T) {
+	hub := events.NewHub()
+	server := httptest.NewServer(wsHandler(hub, func() (networkSnapshot, error) {
+		return networkSnapshot{}, nil
+	}, testWSKeepalive, testUpgrader()))
+	defer server.Close()
+
+	wsURL := "ws" + strings.TrimPrefix(server.URL, "http")
+	header := http.Header{"Origin": []string{"http://evil.example"}}
+	conn, response, err := websocket.DefaultDialer.Dial(wsURL, header)
+	if err == nil {
+		_ = conn.Close()
+		t.Fatal("expected the handshake to be rejected")
+	}
+	if response == nil || response.StatusCode != http.StatusForbidden {
+		code := 0
+		if response != nil {
+			code = response.StatusCode
+		}
+		t.Fatalf("status = %d, want 403", code)
+	}
+}
+
+// TestWSHandlerAcceptsConfiguredPort makes sure the origin list is not hard
+// coded to 13335 any more.
+func TestWSHandlerAcceptsConfiguredPort(t *testing.T) {
+	hub := events.NewHub()
+	upgrader := newWSUpgrader([]string{"http://127.0.0.1:61000"})
+	server := httptest.NewServer(wsHandler(hub, func() (networkSnapshot, error) {
+		return networkSnapshot{}, nil
+	}, testWSKeepalive, upgrader))
+	defer server.Close()
+
+	wsURL := "ws" + strings.TrimPrefix(server.URL, "http")
+	header := http.Header{"Origin": []string{"http://127.0.0.1:61000"}}
+	conn, _, err := websocket.DefaultDialer.Dial(wsURL, header)
+	if err != nil {
+		t.Fatalf("handshake for the configured port failed: %v", err)
+	}
+	defer conn.Close()
 }

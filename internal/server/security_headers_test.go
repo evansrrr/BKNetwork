@@ -46,7 +46,9 @@ func TestContentSecurityPolicyAllowsOnlyRequiredOrigins(t *testing.T) {
 		"form-action 'none'",
 		// The campus portal only exposes JSONP, the IPv6 check is a fetch.
 		"script-src 'self' " + campusTrafficOrigin,
-		"connect-src 'self' http://127.0.0.1:13335 http://localhost:13335 ws://127.0.0.1:13335 ws://localhost:13335 " + ipv6ProbeOrigin,
+		// IPv4 and IPv6 loopback, http for fetches and ws for the socket.
+		"connect-src 'self' http://127.0.0.1:13335 http://localhost:13335 http://[::1]:13335 " +
+			"ws://127.0.0.1:13335 ws://localhost:13335 ws://[::1]:13335 " + ipv6ProbeOrigin,
 	} {
 		if !strings.Contains(policy, want) {
 			t.Errorf("policy is missing %q:\n%s", want, policy)
@@ -87,5 +89,29 @@ func TestServerSendsSecurityHeaders(t *testing.T) {
 	}
 	if response.Header().Get("Content-Security-Policy") == "" {
 		t.Fatal("the real handler chain does not send a CSP")
+	}
+}
+
+func TestLoopbackOriginsFollowPort(t *testing.T) {
+	origins := loopbackOrigins("61000", "http")
+	want := []string{
+		"http://127.0.0.1:61000",
+		"http://localhost:61000",
+		"http://[::1]:61000",
+	}
+	if len(origins) != len(want) {
+		t.Fatalf("origins = %v, want %v", origins, want)
+	}
+	for i, origin := range origins {
+		if origin != want[i] {
+			t.Fatalf("origins = %v, want %v", origins, want)
+		}
+	}
+
+	// An empty port falls back to the default instead of producing "host:".
+	for _, origin := range loopbackOrigins("", "ws") {
+		if !strings.HasSuffix(origin, ":13335") {
+			t.Fatalf("origin %q does not use the default port", origin)
+		}
 	}
 }
