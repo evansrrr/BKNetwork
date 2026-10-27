@@ -1206,8 +1206,19 @@ function pickDefaultAdapter(options) {
   return physical || options[0] || 'WiFi';
 }
 
+// lastAdapterOptionsSignature remembers the option list the selects were last
+// rebuilt from. renderStatus and renderNetwork both sync on every render pass;
+// without this guard the second pass throws away and recreates the same
+// <option> elements twice per update.
+let lastAdapterOptionsSignature = null;
+
 function syncTargetAdapterSelects(names) {
   const options = Array.isArray(names) ? names : [];
+  const signature = options.join('\n');
+  if (signature === lastAdapterOptionsSignature) {
+    return;
+  }
+  lastAdapterOptionsSignature = signature;
   const current = currentIfName();
   const desired = options.includes(current) ? current : pickDefaultAdapter(options);
 
