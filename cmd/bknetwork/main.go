@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"bknetwork/internal/handlers"
+	"bknetwork/internal/logging"
 	"bknetwork/internal/server"
 	appsettings "bknetwork/internal/settings"
 
@@ -21,6 +22,14 @@ import (
 var logger service.Logger
 
 func main() {
+	// A Windows service has no console either, so the log file is the only
+	// place its output can be read afterwards.
+	if path, logErr := logging.Setup(); logErr != nil {
+		log.Printf("file logging disabled: %v", logErr)
+	} else if service.Interactive() {
+		log.Printf("logging to %s", path)
+	}
+
 	cfg, err := appsettings.Load()
 	if err != nil {
 		log.Printf("failed to load settings: %v", err)

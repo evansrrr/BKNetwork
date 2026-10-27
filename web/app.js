@@ -23,6 +23,7 @@ const dns64ModeStateEl = document.getElementById('dns64ModeState');
 const settingsOpenBtn = document.getElementById('settingsOpenBtn');
 const settingsOverlayEl = document.getElementById('settingsOverlay');
 const settingsCloseBtn = document.getElementById('settingsCloseBtn');
+const settingsDiagnosticsBtn = document.getElementById('settingsDiagnosticsBtn');
 const settingAutoStartEl = document.getElementById('settingAutoStart');
 const settingSilentStartEl = document.getElementById('settingSilentStart');
 const settingWarpAutoStartEl = document.getElementById('settingWarpAutoStart');
@@ -534,6 +535,37 @@ async function saveSettings() {
     appendLog(`设置保存失败：${err.message}`);
   } finally {
     settingsState.saving = false;
+  }
+}
+
+// 导出诊断信息：打包版没有可见日志，用户报障时需要一份可直接附带的自检文件。
+async function exportDiagnostics() {
+  if (!settingsDiagnosticsBtn) return;
+  settingsDiagnosticsBtn.disabled = true;
+  setSettingsStatus('正在收集诊断信息...');
+  try {
+    const res = await fetch('/api/v1/diagnostics', { cache: 'no-store' });
+    if (!res.ok) {
+      throw new Error(`HTTP ${res.status}`);
+    }
+    const data = await res.json();
+    const stamp = new Date().toISOString().replace(/[:.]/g, '-');
+    const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `bknetwork-diagnostics-${stamp}.json`;
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    window.setTimeout(() => URL.revokeObjectURL(url), 1000);
+    setSettingsStatus('诊断信息已导出');
+    appendLog('诊断信息已导出');
+  } catch (err) {
+    setSettingsStatus(`导出失败：${err.message}`);
+    appendLog(`诊断信息导出失败：${err.message}`);
+  } finally {
+    settingsDiagnosticsBtn.disabled = false;
   }
 }
 
@@ -1579,6 +1611,12 @@ if (dnsCardEl) {
 
 if (settingsCloseBtn) {
   settingsCloseBtn.addEventListener('click', () => setSettingsOpen(false));
+}
+
+if (settingsDiagnosticsBtn) {
+  settingsDiagnosticsBtn.addEventListener('click', () => {
+    exportDiagnostics().catch(err => console.error('操作失败:', err));
+  });
 }
 
 if (settingsOverlayEl) {

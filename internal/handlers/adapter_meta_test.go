@@ -137,15 +137,18 @@ func TestAdapterMetadataCacheKeepsLastGoodListOnFailure(t *testing.T) {
 		t.Fatalf("items = %v, want the cached adapter", items)
 	}
 
-	// The failed refresh must not be retried on every call.
-	before := atomic.LoadInt32(&calls)
+	// The background refresh failed (it retries once); wait for it to settle,
+	// then make sure a call shortly after does not start another one.
+	waitFor(t, func() bool { return atomic.LoadInt32(&calls) >= 3 })
+	settled := atomic.LoadInt32(&calls)
+
 	clock.advance(2 * time.Second)
 	if _, err := cache.get(ctx); err != nil {
 		t.Fatalf("get: %v", err)
 	}
-	waitFor(t, func() bool { return atomic.LoadInt32(&calls) == before })
-	if got := atomic.LoadInt32(&calls); got > before+1 {
-		t.Fatalf("fetch called %d times after a failure, want at most %d (backoff)", got, before+1)
+	time.Sleep(50 * time.Millisecond)
+	if got := atomic.LoadInt32(&calls); got != settled {
+		t.Fatalf("fetch called %d times after a failure, want %d (backoff)", got, settled)
 	}
 }
 

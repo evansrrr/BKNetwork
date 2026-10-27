@@ -53,6 +53,18 @@ func normalizeDnsServerList(values []string) ([]string, error) {
 	return servers, nil
 }
 
+// describeDnsServers renders a requested DNS list for the audit log. A nil
+// pointer means the family was not part of the request and stays untouched.
+func describeDnsServers(servers *[]string) string {
+	if servers == nil {
+		return "unchanged"
+	}
+	if len(*servers) == 0 {
+		return "empty"
+	}
+	return strings.Join(*servers, ",")
+}
+
 func splitDnsServersByFamily(values []string) ([]string, []string) {
 	ipv4 := make([]string, 0, len(values))
 	ipv6 := make([]string, 0, len(values))

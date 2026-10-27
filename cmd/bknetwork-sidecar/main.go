@@ -7,11 +7,20 @@ import (
 	"syscall"
 
 	"bknetwork/internal/handlers"
+	"bknetwork/internal/logging"
 	"bknetwork/internal/server"
 	appsettings "bknetwork/internal/settings"
 )
 
 func main() {
+	// The packaged build is a GUI process: stderr goes nowhere, so every line
+	// has to reach the log file for a report to be diagnosable.
+	if path, logErr := logging.Setup(); logErr != nil {
+		log.Printf("file logging disabled: %v", logErr)
+	} else {
+		log.Printf("logging to %s", path)
+	}
+
 	cfg, err := appsettings.Load()
 	if err != nil {
 		log.Printf("failed to load settings: %v", err)
