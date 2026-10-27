@@ -486,6 +486,12 @@ async function loadSettings() {
     settingsState.warpAutoStart = !!data.warpAutoStart;
     settingsState.warpAppAutoStart = !!data.warpAppAutoStart;
     syncSettingsControls();
+    if (data.warning) {
+      // 配置文件损坏时后端返回默认值 + warning，保存一次即可修复
+      setSettingsStatus('已使用默认值，重新保存可修复配置文件');
+      appendLog(`读取设置失败：${data.warning}`);
+      return;
+    }
     setSettingsStatus('已加载');
   } catch (err) {
     setSettingsStatus(`加载失败：${err.message}`);
@@ -520,6 +526,9 @@ async function saveSettings() {
     }
     setSettingsStatus('已保存');
     appendLog('设置已保存');
+    if (data.warning) {
+      appendLog(`设置已保存，但原有配置文件读取失败：${data.warning}`);
+    }
   } catch (err) {
     setSettingsStatus(`保存失败：${err.message}`);
     appendLog(`设置保存失败：${err.message}`);
