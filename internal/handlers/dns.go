@@ -84,11 +84,11 @@ func getAdapterDnsServers(ifName string) ([]string, []string, error) {
 		return ipv4, ipv6, nil
 	}
 
-	ctx, cancel := context.WithTimeout(context.Background(), timeoutMedium)
-	defer cancel()
-
-	entriesIPv4, errIPv4 := netshGetDNSServers(ctx, "ipv4")
-	entriesIPv6, errIPv6 := netshGetDNSServers(ctx, "ipv6")
+	// Each query gets its own deadline: sharing one context across both calls
+	// meant a slow IPv4 lookup consumed the budget and the IPv6 lookup failed
+	// with a deadline error, silently dropping that family.
+	entriesIPv4, errIPv4 := netshDNSServersWithTimeout("ipv4")
+	entriesIPv6, errIPv6 := netshDNSServersWithTimeout("ipv6")
 
 	var (
 		ipv4     []string
@@ -119,6 +119,14 @@ func getAdapterDnsServers(ifName string) ([]string, []string, error) {
 
 	// Both netsh queries failed; fall back to PowerShell.
 	return getAdapterDnsServersViaPowerShell(ifName)
+}
+
+// netshDNSServersWithTimeout runs one "show dnsservers" query with its own
+// deadline, so a slow lookup for one family cannot starve the other.
+func netshDNSServersWithTimeout(family string) ([]netshDNSEntry, error) {
+	ctx, cancel := context.WithTimeout(context.Background(), timeoutShort)
+	defer cancel()
+	return netshGetDNSServers(ctx, family)
 }
 
 func getAdapterDnsServersViaPowerShell(ifName string) ([]string, []string, error) {
