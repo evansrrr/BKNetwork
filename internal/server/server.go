@@ -5,6 +5,7 @@ import (
 	"crypto/subtle"
 	"fmt"
 	"log"
+	"net"
 	"net/http"
 	"os"
 	"os/signal"
@@ -50,8 +51,9 @@ func NewServer(addr string) *Server {
 
 	var handler http.Handler = mux
 	if token := strings.TrimSpace(os.Getenv("BKNETWORK_API_TOKEN")); token != "" {
-		handler = localAuthHandler(mux, token)
+		handler = localAuthHandler(handler, token)
 	}
+	handler = securityHeadersHandler(handler, addr)
 
 	return &Server{
 		hub: hub,
@@ -93,6 +95,66 @@ func localAuthHandler(next http.Handler, token string) http.Handler {
 
 func secureTokenEqual(left, right string) bool {
 	return subtle.ConstantTimeCompare([]byte(left), []byte(right)) == 1
+}
+
+// campusTrafficOrigin hosts the JSONP endpoint the UI uses for the campus
+// traffic counter. It is the only third-party script origin that is allowed.
+const campusTrafficOrigin = "http://202.204.48.66:801"
+
+// ipv6ProbeOrigin is the external echo service used by the "IPv6 check" button.
+const ipv6ProbeOrigin = "https://api-ipv6.ip.sb"
+
+// securityHeadersHandler adds browser hardening headers. Without a CSP the
+// page injected third-party (campus portal, plain HTTP) scripts with full
+// access to the privileged local API.
+func securityHeadersHandler(next http.Handler, addr string) http.Handler {
+	policy := contentSecurityPolicy(portOfAddr(addr))
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		header := w.Header()
+		header.Set("Content-Security-Policy", policy)
+		header.Set("X-Content-Type-Options", "nosniff")
+		// Also keeps the session token out of Referer headers.
+		header.Set("Referrer-Policy", "no-referrer")
+		header.Set("X-Frame-Options", "DENY")
+		header.Set("Cross-Origin-Opener-Policy", "same-origin")
+		next.ServeHTTP(w, r)
+	})
+}
+
+// contentSecurityPolicy builds the policy for the UI served on port. The
+// WebSocket origins have to be listed explicitly: 'self' does not cover ws://.
+func contentSecurityPolicy(port string) string {
+	if strings.TrimSpace(port) == "" {
+		port = "13335"
+	}
+	connect := []string{
+		"'self'",
+		"http://127.0.0.1:" + port,
+		"http://localhost:" + port,
+		"ws://127.0.0.1:" + port,
+		"ws://localhost:" + port,
+		ipv6ProbeOrigin,
+	}
+	directives := []string{
+		"default-src 'self'",
+		"base-uri 'none'",
+		"object-src 'none'",
+		"frame-ancestors 'none'",
+		"form-action 'none'",
+		"img-src 'self' data:",
+		"font-src 'self'",
+		"style-src 'self'",
+		"script-src 'self' " + campusTrafficOrigin,
+		"connect-src " + strings.Join(connect, " "),
+	}
+	return strings.Join(directives, "; ") + ";"
+}
+
+func portOfAddr(addr string) string {
+	if _, port, err := net.SplitHostPort(addr); err == nil {
+		return port
+	}
+	return ""
 }
 
 func resolveWebDir() (string, bool) {

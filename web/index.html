@@ -191,15 +191,15 @@
             <div class="control-card">
               <div class="control-label">切换 ip 栈协议</div>
               <div class="mode-select" role="radiogroup" aria-label="网络模式选择">
-                <button id="btnIpv4" class="mode-option" type="button" onclick="switchStack('ipv4').catch(() => {})" aria-pressed="false">
+                <button id="btnIpv4" class="mode-option" type="button" data-switch-mode="ipv4" aria-pressed="false">
                   <span class="mode-dot" aria-hidden="true"></span>
                   <span>仅 v4</span>
                 </button>
-                <button id="btnIpv6" class="mode-option" type="button" onclick="switchStack('ipv6').catch(() => {})" aria-pressed="false">
+                <button id="btnIpv6" class="mode-option" type="button" data-switch-mode="ipv6" aria-pressed="false">
                   <span class="mode-dot" aria-hidden="true"></span>
                   <span>仅 v6</span>
                 </button>
-                <button id="btnBoth" class="mode-option" type="button" onclick="switchStack('both').catch(() => {})" aria-pressed="false">
+                <button id="btnBoth" class="mode-option" type="button" data-switch-mode="both" aria-pressed="false">
                   <span class="mode-dot" aria-hidden="true"></span>
                   <span>双栈</span>
                 </button>
@@ -260,7 +260,7 @@
         </div>
       </section>
 
-      <section class="section" style="margin-top:16px;">
+      <section class="section section--spaced">
         <div class="section-head">
           <div>
             <h2>网卡</h2>
@@ -270,7 +270,7 @@
         <div class="adapter-list" id="adapterList"></div>
       </section>
 
-      <section class="section" style="margin-top:12px;">
+      <section class="section section--spaced-sm">
         <div class="section-head">
           <div>
             <h2>日志</h2>

@@ -171,6 +171,8 @@ h1 { margin: 8px 0 10px; font-size: clamp(28px, 4vw, 44px); line-height: 1.1; le
 .mini .value strong { font-size: 15px; }
 
 .section { padding: 24px; }
+.section--spaced { margin-top: 16px; }
+.section--spaced-sm { margin-top: 12px; }
 .section h2 { margin: 0 0 16px; font-size: 16px; letter-spacing: -0.01em; font-weight: 600; }
 
 .field { display: grid; gap: 8px; margin-bottom: 14px; }
