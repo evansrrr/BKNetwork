@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"os/exec"
 	"strings"
+	"sync"
 	"time"
 
 	"bknetwork/internal/buildinfo"
@@ -330,7 +331,33 @@ func SettingsHandler(hub *events.Hub) http.HandlerFunc {
 	}
 }
 
+// WebSocket keepalive parameters. The UI never sends messages, so without a
+// keepalive a dead peer (sleep, network change, killed webview) is never
+// noticed and the handler leaks until the process exits.
+const (
+	wsWriteWait  = 10 * time.Second
+	wsPongWait   = 60 * time.Second
+	wsPingPeriod = 25 * time.Second
+	wsReadLimit  = 1024
+)
+
+type wsKeepalive struct {
+	writeWait  time.Duration
+	pongWait   time.Duration
+	pingPeriod time.Duration
+}
+
+var defaultWSKeepalive = wsKeepalive{
+	writeWait:  wsWriteWait,
+	pongWait:   wsPongWait,
+	pingPeriod: wsPingPeriod,
+}
+
 func WSHandler(hub *events.Hub) http.HandlerFunc {
+	return wsHandler(hub, collectNetworkSnapshot, defaultWSKeepalive)
+}
+
+func wsHandler(hub *events.Hub, snapshot func() (networkSnapshot, error), keepalive wsKeepalive) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		c, err := upgrader.Upgrade(w, r, nil)
 		if err != nil {
@@ -342,27 +369,71 @@ func WSHandler(hub *events.Hub) http.HandlerFunc {
 		sub := hub.Subscribe(8)
 		defer hub.Unsubscribe(sub)
 
-		if err := c.WriteJSON(events.Event{Type: "hello", Message: "connected to BKNetwork"}); err != nil {
+		// Read pump: the UI sends nothing, but reading is what lets the
+		// connection observe pongs and disconnects. Closing the channel unblocks
+		// the write loop below.
+		done := make(chan struct{})
+		var closeOnce sync.Once
+		stop := func() { closeOnce.Do(func() { close(done) }) }
+
+		c.SetReadLimit(wsReadLimit)
+		if err := c.SetReadDeadline(time.Now().Add(keepalive.pongWait)); err != nil {
+			log.Printf("ws set read deadline: %v", err)
+			return
+		}
+		c.SetPongHandler(func(string) error {
+			return c.SetReadDeadline(time.Now().Add(keepalive.pongWait))
+		})
+
+		go func() {
+			defer stop()
+			for {
+				if _, _, readErr := c.ReadMessage(); readErr != nil {
+					return
+				}
+			}
+		}()
+
+		writeEvent := func(event events.Event) error {
+			if err := c.SetWriteDeadline(time.Now().Add(keepalive.writeWait)); err != nil {
+				return err
+			}
+			return c.WriteJSON(event)
+		}
+
+		if err := writeEvent(events.Event{Type: "hello", Message: "connected to BKNetwork"}); err != nil {
 			log.Printf("ws write hello: %v", err)
 			return
 		}
-		snap, snapErr := collectNetworkSnapshot()
+		snap, snapErr := snapshot()
 		if snapErr != nil {
 			log.Printf("ws collect snapshot: %v", snapErr)
 		}
-		if err := c.WriteJSON(events.Event{Type: "network.status", Message: "network snapshot", Data: snap}); err != nil {
+		if err := writeEvent(events.Event{Type: "network.status", Message: "network snapshot", Data: snap}); err != nil {
 			log.Printf("ws write snapshot: %v", err)
 			return
 		}
 
+		ping := time.NewTicker(keepalive.pingPeriod)
+		defer ping.Stop()
+
 		for {
-			event, ok := <-sub
-			if !ok {
+			select {
+			case <-done:
 				return
-			}
-			if err := c.WriteJSON(event); err != nil {
-				log.Println("ws write error:", err)
-				return
+			case <-ping.C:
+				if err := c.WriteControl(websocket.PingMessage, nil, time.Now().Add(keepalive.writeWait)); err != nil {
+					log.Printf("ws ping: %v", err)
+					return
+				}
+			case event, ok := <-sub:
+				if !ok {
+					return
+				}
+				if err := writeEvent(event); err != nil {
+					log.Println("ws write error:", err)
+					return
+				}
 			}
 		}
 	}
