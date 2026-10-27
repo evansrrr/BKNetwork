@@ -65,6 +65,15 @@ func writeJSON(w http.ResponseWriter, v interface{}, code int) {
 	}
 }
 
+// NotFoundHandler answers unknown API paths with JSON. Without it the catch-all
+// static handler returned index.html with status 200, which made a typo in an
+// API path look like a success.
+func NotFoundHandler() http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		writeJSON(w, map[string]string{"error": "not found", "path": r.URL.Path}, http.StatusNotFound)
+	}
+}
+
 func decodeJSONList[T any](raw string) ([]T, error) {
 	raw = strings.TrimSpace(raw)
 	if raw == "" {

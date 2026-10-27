@@ -45,6 +45,9 @@ func NewServer(addr string) *Server {
 	mux.HandleFunc("/api/v1/status", handlers.StatusHandler(hub))
 	mux.HandleFunc("/api/v1/version/latest", handlers.LatestVersionHandler())
 	mux.HandleFunc("/ws", handlers.WSHandler(hub, loopbackOrigins(portOfAddr(addr), "http")))
+	// Unknown /api paths must not fall through to the static file handler, which
+	// used to answer them with index.html and status 200.
+	mux.HandleFunc("/api/", handlers.NotFoundHandler())
 
 	// static files: prefer the executable directory, then the current working directory.
 	if webDir, ok := resolveWebDir(); ok {
@@ -197,12 +200,23 @@ func securityHeadersHandler(next http.Handler, addr string) http.Handler {
 		header.Set("Referrer-Policy", "no-referrer")
 		header.Set("X-Frame-Options", "DENY")
 		header.Set("Cross-Origin-Opener-Policy", "same-origin")
+		header.Set("Cache-Control", cacheControlFor(r.URL.Path))
 		next.ServeHTTP(w, r)
 	})
 }
 
-// contentSecurityPolicy builds the policy for the UI served on port. The
-// WebSocket origins have to be listed explicitly: 'self' does not cover ws://.
+// cacheControlFor keeps the API and the HTML shell out of every cache. The shell
+// is what references the current app.js/styles.css, so a cached copy would run
+// an old UI after an update; the assets themselves may be revalidated.
+func cacheControlFor(path string) string {
+	switch {
+	case strings.HasPrefix(path, "/api/"), path == "/", strings.HasSuffix(path, ".html"):
+		return "no-store"
+	default:
+		return "no-cache"
+	}
+}
+
 // loopbackOrigins lists the origins this server may be reached from. Both the
 // WebSocket origin check and the CSP are derived from it, so a non default
 // listen port works without touching either.
