@@ -1,11 +1,9 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
   "identifier": "default",
-  "description": "Default capabilities for BKNetwork",
+  "description": "Default capabilities for BKNetwork. The webview only talks to the local HTTP API, so no shell or opener permission is exposed to it.",
   "windows": ["main"],
   "permissions": [
-    "core:default",
-    "shell:allow-open",
-    "opener:allow-open-url"
+    "core:default"
   ]
 }
