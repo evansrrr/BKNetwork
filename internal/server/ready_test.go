@@ -79,3 +79,57 @@ func TestServerAddrReflectsConfiguredAddressBeforeStart(t *testing.T) {
 		t.Fatalf("Addr() = %q, want %q", got, DefaultAddr)
 	}
 }
+
+// TestServerAddrEnvOverride covers the BKNETWORK_LISTEN_ADDR fallback: an
+// explicit argument always wins, an empty environment falls back to the
+// default, and a non default port must be honoured verbatim (the guard, the
+// CSP and the WebSocket origins derive their port from it).
+func TestServerAddrEnvOverride(t *testing.T) {
+	t.Setenv("BKNETWORK_LISTEN_ADDR", "127.0.0.1:18335")
+	if got := NewServer("").Addr(); got != "127.0.0.1:18335" {
+		t.Fatalf("Addr() = %q, want the env override 127.0.0.1:18335", got)
+	}
+
+	t.Setenv("BKNETWORK_LISTEN_ADDR", "   ")
+	if got := NewServer("").Addr(); got != DefaultAddr {
+		t.Fatalf("Addr() = %q, want %q for a blank override", got, DefaultAddr)
+	}
+
+	if got := NewServer("127.0.0.1:9").Addr(); got != "127.0.0.1:9" {
+		t.Fatalf("Addr() = %q, want the explicit argument to win", got)
+	}
+}
+
+// TestServerServesOnEnvOverridePort starts a real listener on the overridden
+// port and proves the guard accepts its own loopback origin on that port.
+func TestServerServesOnEnvOverridePort(t *testing.T) {
+	t.Setenv("BKNETWORK_LISTEN_ADDR", "127.0.0.1:0")
+	server := NewServer("")
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	done := make(chan error, 1)
+	go func() { done <- server.Start(ctx) }()
+
+	select {
+	case <-server.Ready():
+	case err := <-done:
+		t.Fatalf("server exited before becoming ready: %v", err)
+	case <-time.After(5 * time.Second):
+		t.Fatal("server did not become ready")
+	}
+
+	response, err := http.Get("http://" + server.Addr() + "/")
+	if err != nil {
+		t.Fatalf("GET on the bound address: %v", err)
+	}
+	response.Body.Close()
+	if response.StatusCode != http.StatusOK {
+		t.Fatalf("status = %d, want 200", response.StatusCode)
+	}
+
+	cancel()
+	if err := <-done; err != nil {
+		t.Fatalf("Start returned an error during shutdown: %v", err)
+	}
+}

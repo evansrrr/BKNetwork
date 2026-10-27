@@ -37,7 +37,15 @@ const DefaultAddr = "127.0.0.1:13335"
 
 const sessionCookieName = "bknetwork_session"
 
+// NewServer builds the server. An empty addr falls back to
+// BKNETWORK_LISTEN_ADDR (a debug/deployment override that also lets the
+// acceptance suite run next to whatever already occupies the default port)
+// and then to DefaultAddr. The guard, CSP and WebSocket origins all derive
+// from the address, so a non default port needs no further configuration.
 func NewServer(addr string) *Server {
+	if addr == "" {
+		addr = strings.TrimSpace(os.Getenv("BKNETWORK_LISTEN_ADDR"))
+	}
 	if addr == "" {
 		addr = DefaultAddr
 	}
