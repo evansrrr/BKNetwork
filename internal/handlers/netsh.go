@@ -2,25 +2,19 @@ package handlers
 
 import (
 	"context"
+	"log"
 	"net"
 	"regexp"
 	"strconv"
 	"strings"
+	"sync"
 )
 
-// netshAdapterBinding represents the IPv4/IPv6 binding state of a network adapter.
-type netshAdapterBinding struct {
-	Name        string
-	IPv4Enabled bool
-	IPv6Enabled bool
-}
-
-// netshIPConfig represents IP configuration for a network adapter.
-type netshIPConfig struct {
-	Name        string
-	IPv4Gateway string
-	IPv6Gateway string
-}
+// netshIPConfig, parseNetshIPv4Config and netshGetIPv4Config were removed with
+// M1: the gateway is read from the default route row instead. That row carries
+// the gateway address itself, so the parser no longer depends on the localized
+// "Default Gateway:" label of "netsh interface ipv4 show config", and one
+// external process per snapshot disappears with it.
 
 // netshDNSEntry represents DNS servers for a network adapter.
 type netshDNSEntry struct {
@@ -28,116 +22,176 @@ type netshDNSEntry struct {
 	Servers []string
 }
 
-// parseNetshShowInterface parses output from "netsh interface show interface".
-// Returns a list of adapter names and their connected state.
-func parseNetshShowInterface(raw string) map[string]bool {
-	result := make(map[string]bool)
-	lines := strings.Split(raw, "\n")
-	for _, line := range lines {
-		line = strings.TrimSpace(line)
-		if line == "" || strings.HasPrefix(line, "Admin") || strings.HasPrefix(line, "---") {
-			continue
-		}
-		fields := strings.Fields(line)
-		if len(fields) < 4 {
-			continue
-		}
-		adminState := fields[0]
-		state := fields[1]
-		nameIdx := -1
-		for i, f := range fields {
-			if f == "Dedicated" || f == "Loopback" || f == "Internal" || f == "External" {
-				nameIdx = i + 1
-				break
-			}
-		}
-		if nameIdx < 0 || nameIdx >= len(fields) {
-			continue
-		}
-		name := strings.Join(fields[nameIdx:], " ")
-		connected := strings.EqualFold(state, "connected") && strings.EqualFold(adminState, "enabled")
-		result[name] = connected
-	}
-	return result
+// netshConnectedWords and netshDisconnectedWords translate the State column of
+// "netsh interface ipvX show interface". netsh prints it in the system display
+// language: on a Chinese Windows the column reads 已连接/已断开连接, so
+// comparing against "connected" alone reported every adapter as disconnected,
+// which in turn disabled the DNS editor, freeFlow and the DNS64 decision.
+//
+// The lists cover the languages the app is realistically used in; anything else
+// is reported as unknown so the snapshot can fall back to the value
+// PowerShell reported instead of silently claiming "disconnected".
+var netshConnectedWords = []string{
+	"connected",
+	"已连接",
+	"已連線",
+	"已连线",
+	"接続済み",
+	"接続",
+	"verbunden",
+	"connecté",
+	"conectado",
+	"подключено",
+	"연결됨",
+	"bağlı",
+	"połączono",
+	"verbonden",
+	"connesso",
+	"collegato",
 }
 
-// parseNetshInterfaceConnected parses output from
-// "netsh interface ipv4/ipv6 show interface" (both families share the layout).
-// Returns adapter names and their connected state.
-func parseNetshInterfaceConnected(raw string) map[string]bool {
-	result := make(map[string]bool)
-	lines := strings.Split(raw, "\n")
-	for _, line := range lines {
-		line = strings.TrimSpace(line)
-		if line == "" || strings.HasPrefix(line, "Idx") || strings.HasPrefix(line, "---") {
+var netshDisconnectedWords = []string{
+	"disconnected",
+	"已断开连接",
+	"已中斷連線",
+	"已断开",
+	"断开连接",
+	"未接続",
+	"切断",
+	"nicht verbunden",
+	"getrennt",
+	"déconnecté",
+	"non connecté",
+	"desconectado",
+	"отключено",
+	"연결 끊김",
+	"bağlı değil",
+	"rozłączono",
+	"niet verbonden",
+	"non connesso",
+	"disconnesso",
+}
+
+// netshStateConnected reports whether the state word means "connected". The
+// second result is false when the word is not known, which lets callers fall
+// back instead of guessing.
+func netshStateConnected(word string) (connected bool, known bool) {
+	normalized := strings.ToLower(strings.TrimSpace(word))
+	if normalized == "" {
+		return false, false
+	}
+	for _, candidate := range netshDisconnectedWords {
+		if normalized == candidate {
+			return false, true
+		}
+	}
+	for _, candidate := range netshConnectedWords {
+		if normalized == candidate {
+			return true, true
+		}
+	}
+	// Variants such as "disconnected (site-local)" or "not connected".
+	if strings.Contains(normalized, "disconnect") || strings.Contains(normalized, "not connect") {
+		return false, true
+	}
+	if strings.Contains(normalized, "connect") {
+		return true, true
+	}
+	return false, false
+}
+
+var (
+	unknownStateMu   sync.Mutex
+	unknownStateSeen = map[string]struct{}{}
+)
+
+// noteUnknownNetshStates logs unrecognized State words once each. The snapshot
+// is collected every few seconds, so logging on every collection would flood
+// the log on a Windows language the table does not cover yet.
+func noteUnknownNetshStates(words []string) {
+	unknownStateMu.Lock()
+	defer unknownStateMu.Unlock()
+	for _, word := range words {
+		if _, ok := unknownStateSeen[word]; ok {
 			continue
 		}
-		fields := strings.Fields(line)
+		unknownStateSeen[word] = struct{}{}
+		log.Printf("netsh: unrecognized interface state %q; falling back to the adapter status", word)
+	}
+}
+
+// netshInterfaceState is the parsed result of "netsh interface ipvX show
+// interface": adapter names mapped to their connected state, plus the interface
+// index mapping needed to interpret the route table.
+type netshInterfaceState struct {
+	Connected map[string]bool
+	// Known is false for adapters whose state word could not be translated.
+	Known map[string]bool
+	Index map[string]string
+	// UnknownWords lists the state words that were not recognized.
+	UnknownWords []string
+}
+
+func newNetshInterfaceState() netshInterfaceState {
+	return netshInterfaceState{
+		Connected: map[string]bool{},
+		Known:     map[string]bool{},
+		Index:     map[string]string{},
+	}
+}
+
+// parseNetshInterfaceList parses "netsh interface ipvX show interface".
+//
+// Columns are positional (Idx, Met, MTU, State, Name), which is locale
+// independent. The header row is skipped by requiring a numeric index instead
+// of matching the localized "Idx" label, and the state word goes through
+// netshStateConnected instead of being compared with "connected".
+func parseNetshInterfaceList(raw string) netshInterfaceState {
+	state := newNetshInterfaceState()
+	unknown := map[string]struct{}{}
+
+	for _, line := range strings.Split(raw, "\n") {
+		line = strings.TrimSuffix(strings.TrimPrefix(line, "\ufeff"), "\r")
+		fields := netshColumns.Split(strings.TrimSpace(line), -1)
 		if len(fields) < 5 {
 			continue
 		}
-		state := fields[3]
+		// The header and the separator row are skipped by requiring a numeric
+		// interface index; matching the localized "Idx" label would not work.
+		if _, err := strconv.Atoi(strings.TrimSpace(fields[0])); err != nil {
+			continue
+		}
+		// The name is last and may contain single spaces, so everything after
+		// the state column belongs to it.
 		name := strings.Join(fields[4:], " ")
-		result[name] = strings.EqualFold(state, "connected")
-	}
-	return result
-}
-
-// parseNetshInterfaceIndex parses output from
-// "netsh interface ipv4/ipv6 show interface" and maps interface index to name.
-func parseNetshInterfaceIndex(raw string) map[string]string {
-	result := make(map[string]string)
-	lines := strings.Split(raw, "\n")
-	for _, line := range lines {
-		line = strings.TrimSpace(line)
-		if line == "" || strings.HasPrefix(line, "Idx") || strings.HasPrefix(line, "---") {
+		if name == "" {
 			continue
 		}
-		fields := strings.Fields(line)
-		if len(fields) < 5 {
-			continue
-		}
-		idx := fields[0]
-		name := strings.Join(fields[4:], " ")
-		result[idx] = name
-	}
-	return result
-}
+		index := strings.TrimSpace(fields[0])
+		state.Index[index] = name
 
-// parseNetshIPv4Config parses output from "netsh interface ipv4 show config".
-// Returns a list of netshIPConfig with gateway information.
-func parseNetshIPv4Config(raw string) []netshIPConfig {
-	var configs []netshIPConfig
-	var current *netshIPConfig
-
-	lines := strings.Split(raw, "\n")
-	for _, line := range lines {
-		line = strings.TrimSpace(line)
-
-		// Detect interface header: Configuration for interface "Name"
-		if strings.HasPrefix(line, "Configuration for interface") {
-			name := extractQuotedString(line)
-			if name != "" {
-				configs = append(configs, netshIPConfig{Name: name})
-				current = &configs[len(configs)-1]
-			}
-			continue
-		}
-
-		if current == nil {
-			continue
-		}
-
-		// Extract Default Gateway
-		if idx := strings.Index(line, "Default Gateway:"); idx >= 0 {
-			gw := strings.TrimSpace(line[idx+len("Default Gateway:"):])
-			if gw != "" && !strings.EqualFold(gw, "None") {
-				current.IPv4Gateway = gw
+		word := strings.TrimSpace(fields[3])
+		connected, known := netshStateConnected(word)
+		state.Connected[name] = connected
+		state.Known[name] = known
+		if !known {
+			if _, seen := unknown[word]; !seen {
+				unknown[word] = struct{}{}
+				state.UnknownWords = append(state.UnknownWords, word)
 			}
 		}
 	}
-	return configs
+	return state
 }
+
+// netshColumns splits a netsh table row on runs of two or more spaces, which is
+// how netsh separates its columns.
+//
+// A plain strings.Fields split is not usable here: a localized state word may
+// contain a space ("Nicht verbunden"), and whitespace splitting shifted part of
+// it into the adapter name, producing adapters called "verbunden Ethernet".
+// Single spaces stay inside a column, so both cases parse correctly.
+var netshColumns = regexp.MustCompile(`\s{2,}`)
 
 // isWarpAdapterName reports whether the adapter name refers to the Cloudflare WARP tunnel.
 func isWarpAdapterName(name string) bool {
@@ -147,16 +201,25 @@ func isWarpAdapterName(name string) bool {
 
 // defaultRouteCandidate holds one default-route entry parsed from the route table.
 type defaultRouteCandidate struct {
-	name   string
-	metric int
-	isWarp bool
+	name    string
+	gateway string
+	metric  int
+	isWarp  bool
+}
+
+// netshDefaultRoute is the default route that should be treated as the
+// physical one, together with the gateway it points at.
+type netshDefaultRoute struct {
+	Interface string
+	Gateway   string
+	Metric    int
 }
 
 // pickDefaultRoute returns the best interface name among default-route candidates.
 // Preference order: non-WARP over WARP, then lower metric (higher priority).
-func pickDefaultRoute(candidates []defaultRouteCandidate) string {
+func pickDefaultRoute(candidates []defaultRouteCandidate) defaultRouteCandidate {
 	if len(candidates) == 0 {
-		return ""
+		return defaultRouteCandidate{}
 	}
 	best := candidates[0]
 	for _, c := range candidates[1:] {
@@ -170,85 +233,56 @@ func pickDefaultRoute(candidates []defaultRouteCandidate) string {
 			best = c
 		}
 	}
-	return best.name
+	return best
 }
 
-// parseNetshIPv4DefaultRouteWithIdx parses the IPv4 route table and returns the
-// interface name that should be treated as the default (physical) route.
-// When WARP is active it also installs a default route; prefer the non-WARP
-// interface so downstream logic does not mistakenly target the tunnel adapter.
-func parseNetshIPv4DefaultRouteWithIdx(raw string, ifaceMap map[string]string) string {
+// parseNetshDefaultRoute parses a route table ("netsh interface ipv4|ipv6 show
+// route") and returns the interface plus gateway of the default route. When
+// WARP is active it also installs a default route; the non-WARP interface is
+// preferred so downstream logic does not target the tunnel adapter.
+//
+// The parser is positional: the metric must be numeric and the interface index
+// must resolve, which keeps localized headers and separators out without
+// matching any literal.
+func parseNetshDefaultRoute(raw, prefix string, ifaceMap map[string]string) netshDefaultRoute {
 	var candidates []defaultRouteCandidate
-	lines := strings.Split(raw, "\n")
-	for _, line := range lines {
-		line = strings.TrimSpace(line)
-		if line == "" || strings.HasPrefix(line, "Publish") || strings.HasPrefix(line, "---") {
-			continue
-		}
-		fields := strings.Fields(line)
+
+	for _, line := range strings.Split(raw, "\n") {
+		fields := strings.Fields(strings.TrimSpace(strings.TrimPrefix(line, "\ufeff")))
 		if len(fields) < 5 {
 			continue
 		}
-		for i, f := range fields {
-			if f != "0.0.0.0/0" {
+		for i, field := range fields {
+			if field != prefix {
 				continue
 			}
-			// Layout: ... Metric Prefix Idx Gateway Interface ...
+			// Layout: ... Met Prefix Idx Gateway ...
 			if i < 1 || i+1 >= len(fields) {
 				continue
 			}
-			metric, _ := strconv.Atoi(fields[i-1])
-			idx := fields[i+1]
-			name, ok := ifaceMap[idx]
-			if !ok {
+			metric, err := strconv.Atoi(fields[i-1])
+			if err != nil {
 				continue
 			}
+			name, ok := ifaceMap[fields[i+1]]
+			if !ok || name == "" {
+				continue
+			}
+			gateway := ""
+			if i+2 < len(fields) && isIPToken(fields[i+2]) {
+				gateway = fields[i+2]
+			}
 			candidates = append(candidates, defaultRouteCandidate{
-				name:   name,
-				metric: metric,
-				isWarp: isWarpAdapterName(name),
+				name:    name,
+				gateway: gateway,
+				metric:  metric,
+				isWarp:  isWarpAdapterName(name),
 			})
 		}
 	}
-	return pickDefaultRoute(candidates)
-}
 
-// parseNetshIPv6DefaultRouteWithIdx parses the IPv6 route table and returns the
-// interface name that should be treated as the default (physical) route.
-func parseNetshIPv6DefaultRouteWithIdx(raw string, ifaceMap map[string]string) string {
-	var candidates []defaultRouteCandidate
-	lines := strings.Split(raw, "\n")
-	for _, line := range lines {
-		line = strings.TrimSpace(line)
-		if line == "" || strings.HasPrefix(line, "Publish") || strings.HasPrefix(line, "---") {
-			continue
-		}
-		fields := strings.Fields(line)
-		if len(fields) < 5 {
-			continue
-		}
-		for i, f := range fields {
-			if f != "::/0" {
-				continue
-			}
-			// Layout: ... Metric Prefix Idx Gateway Interface ...
-			if i < 1 || i+1 >= len(fields) {
-				continue
-			}
-			metric, _ := strconv.Atoi(fields[i-1])
-			idx := fields[i+1]
-			name, ok := ifaceMap[idx]
-			if !ok {
-				continue
-			}
-			candidates = append(candidates, defaultRouteCandidate{
-				name:   name,
-				metric: metric,
-				isWarp: isWarpAdapterName(name),
-			})
-		}
-	}
-	return pickDefaultRoute(candidates)
+	best := pickDefaultRoute(candidates)
+	return netshDefaultRoute{Interface: best.name, Gateway: best.gateway, Metric: best.metric}
 }
 
 // parseNetshDNSServers parses output from "netsh interface ipv4/ipv6 show dnsservers".
@@ -270,13 +304,12 @@ func parseNetshDNSServers(raw string) []netshDNSEntry {
 	for _, rawLine := range strings.Split(raw, "\n") {
 		line := strings.TrimSpace(strings.TrimPrefix(rawLine, "\ufeff"))
 
-		// Detect interface header
-		if strings.HasPrefix(line, "Configuration for interface") {
-			name := extractQuotedString(line)
-			if name != "" {
-				entries = append(entries, netshDNSEntry{Name: name})
-				current = &entries[len(entries)-1]
-			}
+		// Section header. The label is localized ("Configuration for interface"
+		// / 接口 "WiFi" 的配置), but every locale quotes the interface name, so
+		// the quoted token identifies the section instead of the literal.
+		if name := extractQuotedString(line); name != "" {
+			entries = append(entries, netshDNSEntry{Name: name})
+			current = &entries[len(entries)-1]
 			continue
 		}
 
@@ -284,32 +317,32 @@ func parseNetshDNSServers(raw string) []netshDNSEntry {
 			continue
 		}
 
-		// Extract DNS servers - two patterns:
-		// "DNS servers configured through DHCP:  202.204.52.94"
-		// "Statically Configured DNS Servers:    8.8.8.8"
-		if (strings.Contains(line, "DNS servers") || strings.Contains(line, "DNS Servers")) && strings.Contains(line, ":") {
-			idx := strings.Index(line, ":")
-			if value := strings.TrimSpace(line[idx+1:]); isDNSServerToken(value) {
-				current.Servers = append(current.Servers, value)
-			}
+		// A line that is nothing but an address is a continuation line. This is
+		// checked first because IPv6 addresses contain colons, and the key/value
+		// branch below would otherwise slice one into an unparsable value.
+		if isIPToken(line) {
+			current.Servers = append(current.Servers, line)
 			continue
 		}
 
-		// Continuation lines are indented and hold a bare address. The address
-		// check is what separates them from labels such as
-		// "Register with which suffix:" or from IPv6 addresses (which contain
-		// colons themselves).
-		if len(rawLine) > 0 && (rawLine[0] == ' ' || rawLine[0] == '\t') && isDNSServerToken(line) {
-			current.Servers = append(current.Servers, line)
+		// Otherwise accept any "label: value" line whose value is an address.
+		// The label is localized ("DNS servers configured through DHCP" /
+		// "通过 DHCP 配置的 DNS 服务器"), so it is not matched literally; the
+		// address check drops "None"/"无" and the suffix label on its own.
+		if idx := strings.Index(line, ":"); idx >= 0 {
+			if value := strings.TrimSpace(line[idx+1:]); isIPToken(value) {
+				current.Servers = append(current.Servers, value)
+			}
 		}
 	}
 	return entries
 }
 
-// isDNSServerToken reports whether value looks like a DNS server address.
-// It rejects empty values and the "None" placeholder netsh prints when a
-// family has no servers configured.
-func isDNSServerToken(value string) bool {
+// isIPToken reports whether value looks like an IP address. Addresses with a
+// zone suffix (fe80::1%12) and bracketed IPv6 addresses are accepted. Empty
+// values and the "None" placeholder netsh prints for an unconfigured family
+// are rejected.
+func isIPToken(value string) bool {
 	value = strings.TrimSpace(value)
 	if value == "" || strings.EqualFold(value, "none") {
 		return false
@@ -334,53 +367,26 @@ func extractQuotedString(line string) string {
 	return line[start+1 : start+1+end]
 }
 
-// netshInterfaceState is the parsed result of "netsh interface ipvX show
-// interface": adapter names mapped to their connected state, plus the interface
-// index mapping needed to interpret the route table.
-type netshInterfaceState struct {
-	Connected map[string]bool
-	Index     map[string]string
-}
-
 // netshGetInterfaces runs "netsh interface ipvX show interface" once and returns
 // both the connected state and the index mapping, so callers do not have to run
 // the same command again for the route table.
 func netshGetInterfaces(ctx context.Context, family string) (netshInterfaceState, error) {
 	raw, err := execWithTimeout(ctx, "netsh", "interface", family, "show", "interface")
 	if err != nil && strings.TrimSpace(raw) == "" {
-		return netshInterfaceState{}, err
+		return newNetshInterfaceState(), err
 	}
-	return netshInterfaceState{
-		Connected: parseNetshInterfaceConnected(raw),
-		Index:     parseNetshInterfaceIndex(raw),
-	}, nil
+	state := parseNetshInterfaceList(raw)
+	noteUnknownNetshStates(state.UnknownWords)
+	return state, nil
 }
 
-// netshGetIPv4Config gets IPv4 configuration including gateway.
-func netshGetIPv4Config(ctx context.Context) ([]netshIPConfig, error) {
-	raw, err := execWithTimeout(ctx, "netsh", "interface", "ipv4", "show", "config")
-	if err != nil && strings.TrimSpace(raw) == "" {
-		return nil, err
-	}
-	return parseNetshIPv4Config(raw), nil
-}
-
-// netshGetIPv4DefaultRoute gets the interface name for the IPv4 default route.
-func netshGetIPv4DefaultRoute(ctx context.Context, ifaceMap map[string]string) (string, error) {
-	routeRaw, err := execWithTimeout(ctx, "netsh", "interface", "ipv4", "show", "route")
+// netshGetDefaultRoute gets the default route (and its gateway) for a family.
+func netshGetDefaultRoute(ctx context.Context, family, prefix string, ifaceMap map[string]string) (netshDefaultRoute, error) {
+	routeRaw, err := execWithTimeout(ctx, "netsh", "interface", family, "show", "route")
 	if err != nil && strings.TrimSpace(routeRaw) == "" {
-		return "", err
+		return netshDefaultRoute{}, err
 	}
-	return parseNetshIPv4DefaultRouteWithIdx(routeRaw, ifaceMap), nil
-}
-
-// netshGetIPv6DefaultRoute gets the interface name for the IPv6 default route.
-func netshGetIPv6DefaultRoute(ctx context.Context, ifaceMap map[string]string) (string, error) {
-	routeRaw, err := execWithTimeout(ctx, "netsh", "interface", "ipv6", "show", "route")
-	if err != nil && strings.TrimSpace(routeRaw) == "" {
-		return "", err
-	}
-	return parseNetshIPv6DefaultRouteWithIdx(routeRaw, ifaceMap), nil
+	return parseNetshDefaultRoute(routeRaw, prefix, ifaceMap), nil
 }
 
 // netshGetDNSServers gets DNS servers for all adapters.
@@ -391,7 +397,3 @@ func netshGetDNSServers(ctx context.Context, family string) ([]netshDNSEntry, er
 	}
 	return parseNetshDNSServers(raw), nil
 }
-
-// escapePowerShellSingleQuotedString is also used for PowerShell commands in other files.
-// This regex is used for parsing netsh output.
-var netshWhitespaceRegex = regexp.MustCompile(`\s+`)

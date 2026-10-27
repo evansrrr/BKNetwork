@@ -163,7 +163,7 @@ func TestPlanDNSServersPreservesUntouchedFamily(t *testing.T) {
 	})
 }
 
-func TestIsDNSServerToken(t *testing.T) {
+func TestIsIPToken(t *testing.T) {
 	tests := []struct {
 		value string
 		want  bool
@@ -177,8 +177,8 @@ func TestIsDNSServerToken(t *testing.T) {
 		{"Primary only", false},
 	}
 	for _, tc := range tests {
-		if got := isDNSServerToken(tc.value); got != tc.want {
-			t.Errorf("isDNSServerToken(%q) = %v, want %v", tc.value, got, tc.want)
+		if got := isIPToken(tc.value); got != tc.want {
+			t.Errorf("isIPToken(%q) = %v, want %v", tc.value, got, tc.want)
 		}
 	}
 }
