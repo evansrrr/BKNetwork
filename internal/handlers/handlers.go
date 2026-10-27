@@ -204,6 +204,9 @@ func WarpHandler(hub *events.Hub) http.HandlerFunc {
 			return
 		}
 
+		// Mutations keep their own budget instead of the request context: if the
+		// browser goes away mid-request, killing the helper process would also
+		// kill the verification/rollback that follows.
 		ctx, cancel := context.WithTimeout(context.Background(), timeoutShort)
 		defer cancel()
 
@@ -246,7 +249,9 @@ func WarpStatusHandler() http.HandlerFunc {
 			writeJSON(w, map[string]string{"error": "method not allowed"}, http.StatusMethodNotAllowed)
 			return
 		}
-		ctx, cancel := context.WithTimeout(context.Background(), timeoutShort)
+		// Read-only probe: bind it to the request so a client that navigates
+		// away does not leave a warp-cli process behind.
+		ctx, cancel := context.WithTimeout(r.Context(), timeoutShort)
 		defer cancel()
 		probe := probeWarpStatus(ctx)
 		writeJSON(w, map[string]interface{}{
