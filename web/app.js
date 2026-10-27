@@ -1641,6 +1641,13 @@ function connectWS() {
 setAdvancedMode(false);
 showInitializationToast();
 
+// 切换按钮通过 data 属性绑定，不依赖内联 onclick（CSP 禁止内联脚本）
+for (const button of document.querySelectorAll('[data-switch-mode]')) {
+  button.addEventListener('click', () => {
+    switchStack(button.dataset.switchMode).catch(() => {});
+  });
+}
+
 refreshStatus(true);
 startWarpStatusPoll();
 window.addEventListener('load', () => {
