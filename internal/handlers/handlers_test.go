@@ -57,6 +57,40 @@ func TestParseWarpConnected(t *testing.T) {
 			want:       false,
 			wantStatus: "Checking for update",
 		},
+		{
+			// Regression: the old keyword check treated every value containing
+			// "connect" as not connected, so plain "Status: Connected" (older
+			// warp-cli builds, no network line) was judged offline forever.
+			name:       "plain connected without network line",
+			raw:        "Status: Connected\n",
+			want:       true,
+			wantStatus: "Connected",
+		},
+		{
+			name:       "connected without network line (update form)",
+			raw:        "Status update: Connected\nReason: Manual\n",
+			want:       true,
+			wantStatus: "Connected",
+		},
+		{
+			name:       "CRLF line endings",
+			raw:        "Status update: Connected\r\nNetwork: unstable\r\n",
+			want:       true,
+			wantStatus: "Connected",
+		},
+		{
+			name:       "BOM prefix",
+			raw:        "\ufeffStatus: Connected\n",
+			want:       true,
+			wantStatus: "Connected",
+		},
+		{
+			// Localized output must degrade to "unknown" instead of guessing.
+			name:       "localized connected",
+			raw:        "状态: 已连接\n",
+			want:       false,
+			wantStatus: "",
+		},
 	}
 
 	for _, tc := range tests {
@@ -67,6 +101,38 @@ func TestParseWarpConnected(t *testing.T) {
 			}
 			if gotStatus != tc.wantStatus {
 				t.Fatalf("parseWarpConnected() status = %q, want %q", gotStatus, tc.wantStatus)
+			}
+		})
+	}
+}
+
+func TestParseWarpStatusJSON(t *testing.T) {
+	tests := []struct {
+		name       string
+		raw        string
+		want       bool
+		wantStatus string
+		wantOK     bool
+	}{
+		{"lowercase key", `{"status": "Connected"}`, true, "Connected", true},
+		{"capitalized key", `{"Status": "Connected"}`, true, "Connected", true},
+		{"disconnected", `{"status": "Disconnected"}`, false, "Disconnected", true},
+		{"connecting", `{"status": "Connecting"}`, false, "Connecting", true},
+		{"boolean connected key", `{"connected": true}`, true, "Connected", true},
+		{"boolean false", `{"connected": false}`, false, "Disconnected", true},
+		{"no status field", `{"mode": "warp"}`, false, "", false},
+		{"not json", "Status update: Connected", false, "", false},
+		{"broken json", `{"status": "Connected"`, false, "", false},
+		{"bom json", "\ufeff{\"status\": \"Connected\"}", true, "Connected", true},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			got, gotStatus, ok := parseWarpStatusJSON(tc.raw)
+			if ok != tc.wantOK {
+				t.Fatalf("parseWarpStatusJSON() ok = %v, want %v", ok, tc.wantOK)
+			}
+			if got != tc.want || gotStatus != tc.wantStatus {
+				t.Fatalf("parseWarpStatusJSON() = (%v, %q), want (%v, %q)", got, gotStatus, tc.want, tc.wantStatus)
 			}
 		})
 	}

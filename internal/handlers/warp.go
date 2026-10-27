@@ -2,11 +2,13 @@ package handlers
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"os"
 	"os/exec"
 	"runtime"
 	"strings"
+	"sync/atomic"
 	"time"
 )
 
@@ -14,6 +16,24 @@ var errUnknownWarpAction = errors.New("unknown warp action")
 
 func probeWarpStatus(ctx context.Context) warpSnapshot {
 	result := warpSnapshot{CheckedAt: time.Now().Format(time.RFC3339)}
+	// Newer warp-cli builds accept --json and are parsed first: JSON has a
+	// stable schema, while the text form has changed wording several times.
+	// When the flag is unsupported (or the output is not JSON) the plain text
+	// form below stays the source of truth.
+	if !warpJSONUnsupported.Load() {
+		jsonOut, jsonErr := execWithTimeout(ctx, warpCLIPath(), "status", "--json")
+		jsonRaw := strings.TrimSpace(jsonOut)
+		if jsonErr == nil && strings.HasPrefix(jsonRaw, "{") {
+			if connected, status, ok := parseWarpStatusJSON(jsonRaw); ok {
+				result.Raw = jsonRaw
+				result.Connected, result.Status = connected, status
+				return result
+			}
+		}
+		if jsonErr != nil && strings.Contains(strings.ToLower(jsonOut), "unexpected argument") {
+			warpJSONUnsupported.Store(true)
+		}
+	}
 	out, err := execWithTimeout(ctx, warpCLIPath(), "status")
 	result.Raw = strings.TrimSpace(out)
 	if err != nil && result.Raw == "" {
@@ -53,6 +73,10 @@ func parseWarpSettingsValue(raw, key string) string {
 	return ""
 }
 
+// parseWarpConnected classifies warp-cli status text. "Connected" only means
+// usable connectivity when the network line agrees: warp-cli reports the
+// tunnel state and the network health separately, and "Connected" with
+// "Network: down" used to be shown as a working connection.
 func parseWarpConnected(raw string) (bool, string) {
 	text := strings.ToLower(strings.TrimSpace(raw))
 	if text == "" {
@@ -77,15 +101,99 @@ func parseWarpConnected(raw string) (bool, string) {
 			continue
 		}
 		keyLower := strings.ToLower(key)
-		if strings.Contains(keyLower, "status") || strings.Contains(keyLower, "state") {
-			valueLower := strings.ToLower(value)
-			if strings.Contains(valueLower, "connect") || strings.Contains(valueLower, "check") || strings.Contains(valueLower, "update") || strings.Contains(valueLower, "disabled") || strings.Contains(valueLower, "off") || strings.Contains(valueLower, "disconnect") {
-				return false, value
-			}
-			return false, ""
+		if !strings.Contains(keyLower, "status") && !strings.Contains(keyLower, "state") {
+			continue
 		}
+		connected, recognized := warpValueMeansConnected(value)
+		if !recognized {
+			// Unknown wording (localized output, a new release): keep scanning
+			// instead of answering from a guess.
+			continue
+		}
+		if connected && !warpNetworkHealthy(raw) {
+			return false, value
+		}
+		return connected, value
 	}
 	return false, ""
+}
+
+// warpValueMeansConnected classifies one status word. The negatives are listed
+// first because "disconnected" and "connecting" both contain "connected"'s
+// substring - the old check treated every value containing "connect",
+// including plain "Connected", as not connected.
+func warpValueMeansConnected(value string) (connected, recognized bool) {
+	valueLower := strings.ToLower(strings.TrimSpace(value))
+	if valueLower == "" {
+		return false, false
+	}
+	switch {
+	case strings.Contains(valueLower, "disconnect"),
+		strings.Contains(valueLower, "connecting"),
+		strings.Contains(valueLower, "connect failed"),
+		strings.Contains(valueLower, "check"),
+		strings.Contains(valueLower, "offline"),
+		strings.Contains(valueLower, "disabled"),
+		strings.Contains(valueLower, "update"):
+		return false, true
+	case strings.Contains(valueLower, "connect"):
+		return true, true
+	}
+	return false, false
+}
+
+// warpNetworkHealthy reports whether the output carries a network line, and if
+// so whether it says the network is usable. No network information means no
+// veto: plain "Status: Connected" (older warp-cli builds) must not be judged
+// offline just because the health line is absent.
+func warpNetworkHealthy(raw string) bool {
+	network := parseWarpSettingsValue(raw, "Network")
+	if network == "" {
+		return true
+	}
+	networkLower := strings.ToLower(network)
+	return strings.Contains(networkLower, "healthy") || strings.Contains(networkLower, "unstable")
+}
+
+// warpJSONUnsupported remembers that this warp-cli build rejects the --json
+// flag, so later probes skip the extra process spawn instead of paying for it
+// on every snapshot.
+var warpJSONUnsupported atomic.Bool
+
+// parseWarpStatusJSON reads the JSON output of newer `warp-cli status --json`
+// builds. ok is false when the output is not JSON or carries no recognizable
+// status field, in which case the caller falls back to the text form.
+func parseWarpStatusJSON(raw string) (connected bool, status string, ok bool) {
+	trimmed := strings.TrimSpace(strings.TrimPrefix(raw, "\ufeff"))
+	if !strings.HasPrefix(trimmed, "{") {
+		return false, "", false
+	}
+	var fields map[string]any
+	if err := json.Unmarshal([]byte(trimmed), &fields); err != nil {
+		return false, "", false
+	}
+	for key, value := range fields {
+		keyLower := strings.ToLower(key)
+		if strings.Contains(keyLower, "connected") {
+			if flag, isBool := value.(bool); isBool {
+				if flag {
+					return true, "Connected", true
+				}
+				return false, "Disconnected", true
+			}
+		}
+		if !strings.Contains(keyLower, "status") && !strings.Contains(keyLower, "state") {
+			continue
+		}
+		text, isText := value.(string)
+		if !isText {
+			continue
+		}
+		if flag, recognized := warpValueMeansConnected(text); recognized {
+			return flag, text, true
+		}
+	}
+	return false, "", false
 }
 
 func applyWarpAction(ctx context.Context, action string) (string, error) {
