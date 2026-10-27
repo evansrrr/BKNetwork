@@ -74,26 +74,45 @@ func NewServer(addr string) *Server {
 }
 
 func localAuthHandler(next http.Handler, token string) http.Handler {
+	return newLocalAuthHandler(next, token, newSessionStore(maxSessions))
+}
+
+func newLocalAuthHandler(next http.Handler, token string, sessions *sessionStore) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Path == "/" && secureTokenEqual(r.URL.Query().Get("token"), token) {
-			http.SetCookie(w, &http.Cookie{
-				Name:     sessionCookieName,
-				Value:    token,
-				Path:     "/",
-				HttpOnly: true,
-				SameSite: http.SameSiteStrictMode,
-			})
-			w.Header().Set("Cache-Control", "no-store")
-			http.Redirect(w, r, "/", http.StatusSeeOther)
-			return
+		// The bootstrap token is only accepted from the URL once, to mint a
+		// session. The browser then keeps a random session id in an HttpOnly
+		// cookie, so the bootstrap token never lives in the address bar, the
+		// history, or a readable cookie.
+		if r.URL.Path == "/" {
+			if candidate := r.URL.Query().Get("token"); candidate != "" && secureTokenEqual(candidate, token) {
+				secret, err := sessions.issue()
+				if err != nil {
+					log.Printf("auth: failed to create session: %v", err)
+					http.Error(w, "unauthorized", http.StatusInternalServerError)
+					return
+				}
+				http.SetCookie(w, &http.Cookie{
+					Name:     sessionCookieName,
+					Value:    secret,
+					Path:     "/",
+					HttpOnly: true,
+					SameSite: http.SameSiteStrictMode,
+				})
+				w.Header().Set("Cache-Control", "no-store")
+				http.Redirect(w, r, "/", http.StatusSeeOther)
+				return
+			}
 		}
 
-		if strings.HasPrefix(r.Header.Get("Authorization"), "Bearer ") &&
-			secureTokenEqual(strings.TrimPrefix(r.Header.Get("Authorization"), "Bearer "), token) {
+		// Non-browser callers (the desktop shell) use the bootstrap token as a
+		// bearer token.
+		if bearer := strings.TrimSpace(strings.TrimPrefix(r.Header.Get("Authorization"), "Bearer ")); bearer != "" &&
+			strings.HasPrefix(r.Header.Get("Authorization"), "Bearer ") &&
+			secureTokenEqual(bearer, token) {
 			next.ServeHTTP(w, r)
 			return
 		}
-		if cookie, err := r.Cookie(sessionCookieName); err == nil && secureTokenEqual(cookie.Value, token) {
+		if cookie, err := r.Cookie(sessionCookieName); err == nil && sessions.valid(cookie.Value) {
 			next.ServeHTTP(w, r)
 			return
 		}

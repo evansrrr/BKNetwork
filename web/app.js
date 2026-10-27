@@ -1641,6 +1641,16 @@ function connectWS() {
 setAdvancedMode(false);
 showInitializationToast();
 
+// 引导 token 只用于换取会话 Cookie，立即从地址栏和历史记录中去掉
+if (location.search) {
+  const params = new URLSearchParams(location.search);
+  if (params.has('token')) {
+    params.delete('token');
+    const query = params.toString();
+    history.replaceState(null, '', location.pathname + (query ? '?' + query : '') + location.hash);
+  }
+}
+
 // 切换按钮通过 data 属性绑定，不依赖内联 onclick（CSP 禁止内联脚本）
 for (const button of document.querySelectorAll('[data-switch-mode]')) {
   button.addEventListener('click', () => {
