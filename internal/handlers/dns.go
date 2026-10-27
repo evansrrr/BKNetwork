@@ -9,11 +9,13 @@ import (
 	"time"
 )
 
+// escapePowerShellSingleQuotedString escapes a value that is embedded in a
+// single-quoted string. Inside single quotes only the quote character is
+// special: backticks and $ are literal, so prefixing them with a backtick (as
+// this used to do) changed the value instead of escaping it, and an adapter
+// named e.g. "IPv6$" could no longer be found.
 func escapePowerShellSingleQuotedString(value string) string {
-	value = strings.ReplaceAll(value, "`", "``")
-	value = strings.ReplaceAll(value, "$", "`$")
-	value = strings.ReplaceAll(value, "'", "''")
-	return value
+	return strings.ReplaceAll(value, "'", "''")
 }
 
 func joinPowerShellStringArray(values []string) string {

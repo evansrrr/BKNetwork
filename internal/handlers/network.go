@@ -32,7 +32,7 @@ func psBool(b bool) string {
 // psSingleQuote quotes a value for a PowerShell single-quoted string. Only the
 // quote character needs escaping there; $ and ` are literal.
 func psSingleQuote(value string) string {
-	return "'" + strings.ReplaceAll(value, "'", "''") + "'"
+	return "'" + escapePowerShellSingleQuotedString(value) + "'"
 }
 
 // bindingState describes which IP stacks are bound to an adapter.
