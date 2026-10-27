@@ -13,7 +13,6 @@ import (
 
 	"bknetwork/internal/buildinfo"
 	"bknetwork/internal/events"
-	appsettings "bknetwork/internal/settings"
 
 	"github.com/gorilla/websocket"
 )
@@ -45,13 +44,6 @@ type apiResponse struct {
 	Detail  string      `json:"detail,omitempty"`
 	Output  string      `json:"output,omitempty"`
 	Payload interface{} `json:"payload,omitempty"`
-}
-
-type settingsSnapshot struct {
-	AutoStart        bool `json:"autoStart"`
-	SilentStart      bool `json:"silentStart"`
-	WarpAutoStart    bool `json:"warpAutoStart"`
-	WarpAppAutoStart bool `json:"warpAppAutoStart"`
 }
 
 func writeJSON(w http.ResponseWriter, v interface{}, code int) {
@@ -314,52 +306,6 @@ func DnsHandler(hub *events.Hub) http.HandlerFunc {
 			"request": payload,
 			"output":  strings.TrimSpace(out),
 		})
-	}
-}
-
-func SettingsHandler(hub *events.Hub) http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
-		switch r.Method {
-		case http.MethodGet:
-			cfg, err := appsettings.Load()
-			if err != nil {
-				writeJSON(w, map[string]string{"error": err.Error()}, http.StatusInternalServerError)
-				return
-			}
-			writeJSON(w, settingsSnapshot{AutoStart: cfg.AutoStart, SilentStart: cfg.SilentStart, WarpAutoStart: cfg.WarpAutoStart, WarpAppAutoStart: cfg.WarpAppAutoStart}, http.StatusOK)
-		case http.MethodPost:
-			var payload settingsSnapshot
-			if err := json.NewDecoder(r.Body).Decode(&payload); err != nil {
-				writeJSON(w, map[string]string{"error": "invalid json"}, http.StatusBadRequest)
-				return
-			}
-			prevCfg, err := appsettings.Load()
-			if err != nil {
-				writeJSON(w, map[string]string{"error": err.Error()}, http.StatusInternalServerError)
-				return
-			}
-			cfg := appsettings.Settings{AutoStart: payload.AutoStart, SilentStart: payload.SilentStart, WarpAutoStart: payload.WarpAutoStart, WarpAppAutoStart: payload.WarpAppAutoStart}
-			if err := appsettings.Save(cfg); err != nil {
-				writeJSON(w, map[string]string{"error": err.Error()}, http.StatusInternalServerError)
-				return
-			}
-			if prevCfg.AutoStart != cfg.AutoStart {
-				if err := appsettings.ApplyStartupShortcut(cfg.AutoStart); err != nil {
-					writeJSON(w, map[string]string{"error": err.Error()}, http.StatusInternalServerError)
-					return
-				}
-			}
-			if prevCfg.WarpAppAutoStart != cfg.WarpAppAutoStart {
-				if err := appsettings.ApplyWarpAppStartupShortcut(cfg.WarpAppAutoStart); err != nil {
-					writeJSON(w, map[string]string{"error": err.Error()}, http.StatusInternalServerError)
-					return
-				}
-			}
-			notify(hub, "settings.ok", "settings updated", settingsSnapshot{AutoStart: cfg.AutoStart, SilentStart: cfg.SilentStart, WarpAutoStart: cfg.WarpAutoStart, WarpAppAutoStart: cfg.WarpAppAutoStart})
-			writeJSON(w, map[string]any{"ok": true, "settings": settingsSnapshot{AutoStart: cfg.AutoStart, SilentStart: cfg.SilentStart, WarpAutoStart: cfg.WarpAutoStart, WarpAppAutoStart: cfg.WarpAppAutoStart}}, http.StatusOK)
-		default:
-			writeJSON(w, map[string]string{"error": "method not allowed"}, http.StatusMethodNotAllowed)
-		}
 	}
 }
 
