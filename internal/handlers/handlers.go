@@ -17,14 +17,25 @@ import (
 	"github.com/gorilla/websocket"
 )
 
-var upgrader = websocket.Upgrader{
-	CheckOrigin: func(r *http.Request) bool {
-		origin := r.Header.Get("Origin")
-		if origin == "" {
-			return true
-		}
-		return origin == "http://localhost:13335" || origin == "http://127.0.0.1:13335"
-	},
+// newWSUpgrader accepts the origins the server actually listens on. It used to
+// be a package level upgrader with a hard coded ":13335", so a different listen
+// port rejected every browser handshake; an empty Origin (non-browser client) is
+// still allowed, and the guard rejects non-loopback hosts independently.
+func newWSUpgrader(allowedOrigins []string) websocket.Upgrader {
+	allowed := make(map[string]struct{}, len(allowedOrigins))
+	for _, origin := range allowedOrigins {
+		allowed[origin] = struct{}{}
+	}
+	return websocket.Upgrader{
+		CheckOrigin: func(r *http.Request) bool {
+			origin := r.Header.Get("Origin")
+			if origin == "" {
+				return true
+			}
+			_, ok := allowed[origin]
+			return ok
+		},
+	}
 }
 
 const (
@@ -336,13 +347,13 @@ var defaultWSKeepalive = wsKeepalive{
 	pingPeriod: wsPingPeriod,
 }
 
-func WSHandler(hub *events.Hub) http.HandlerFunc {
+func WSHandler(hub *events.Hub, allowedOrigins []string) http.HandlerFunc {
 	// The cached snapshot is shared with /api/v1/status, so opening a window
 	// does not start a second full collection.
-	return wsHandler(hub, getNetworkSnapshot, defaultWSKeepalive)
+	return wsHandler(hub, getNetworkSnapshot, defaultWSKeepalive, newWSUpgrader(allowedOrigins))
 }
 
-func wsHandler(hub *events.Hub, snapshot func() (networkSnapshot, error), keepalive wsKeepalive) http.HandlerFunc {
+func wsHandler(hub *events.Hub, snapshot func() (networkSnapshot, error), keepalive wsKeepalive, upgrader websocket.Upgrader) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		c, err := upgrader.Upgrade(w, r, nil)
 		if err != nil {
