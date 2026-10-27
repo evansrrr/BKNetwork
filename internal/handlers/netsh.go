@@ -2,6 +2,7 @@ package handlers
 
 import (
 	"context"
+	"net"
 	"regexp"
 	"strconv"
 	"strings"
@@ -263,13 +264,22 @@ func parseNetshIPv6DefaultRouteWithIdx(raw string, ifaceMap map[string]string) s
 
 // parseNetshDNSServers parses output from "netsh interface ipv4/ipv6 show dnsservers".
 // Returns a list of netshDNSEntry with DNS server information.
+//
+// netsh prints the first server on the key line and any additional servers on
+// indented continuation lines:
+//
+//	Statically Configured DNS Servers:    8.8.8.8
+//	                                      1.1.1.1
+//
+// Indentation therefore has to be checked against the raw line: after
+// TrimSpace the leading whitespace is gone and the continuation branch can
+// never match.
 func parseNetshDNSServers(raw string) []netshDNSEntry {
 	var entries []netshDNSEntry
 	var current *netshDNSEntry
 
-	lines := strings.Split(raw, "\n")
-	for _, line := range lines {
-		line = strings.TrimSpace(line)
+	for _, rawLine := range strings.Split(raw, "\n") {
+		line := strings.TrimSpace(strings.TrimPrefix(rawLine, "\ufeff"))
 
 		// Detect interface header
 		if strings.HasPrefix(line, "Configuration for interface") {
@@ -290,22 +300,36 @@ func parseNetshDNSServers(raw string) []netshDNSEntry {
 		// "Statically Configured DNS Servers:    8.8.8.8"
 		if (strings.Contains(line, "DNS servers") || strings.Contains(line, "DNS Servers")) && strings.Contains(line, ":") {
 			idx := strings.Index(line, ":")
-			value := strings.TrimSpace(line[idx+1:])
-			if value != "" && !strings.EqualFold(value, "None") {
+			if value := strings.TrimSpace(line[idx+1:]); isDNSServerToken(value) {
 				current.Servers = append(current.Servers, value)
 			}
 			continue
 		}
 
-		// Continuation lines (indented, no key) are additional DNS servers
-		if len(line) > 0 && line[0] == ' ' && current.Servers != nil {
-			trimmed := strings.TrimSpace(line)
-			if trimmed != "" && !strings.Contains(trimmed, ":") {
-				current.Servers = append(current.Servers, trimmed)
-			}
+		// Continuation lines are indented and hold a bare address. The address
+		// check is what separates them from labels such as
+		// "Register with which suffix:" or from IPv6 addresses (which contain
+		// colons themselves).
+		if len(rawLine) > 0 && (rawLine[0] == ' ' || rawLine[0] == '\t') && isDNSServerToken(line) {
+			current.Servers = append(current.Servers, line)
 		}
 	}
 	return entries
+}
+
+// isDNSServerToken reports whether value looks like a DNS server address.
+// It rejects empty values and the "None" placeholder netsh prints when a
+// family has no servers configured.
+func isDNSServerToken(value string) bool {
+	value = strings.TrimSpace(value)
+	if value == "" || strings.EqualFold(value, "none") {
+		return false
+	}
+	if idx := strings.Index(value, "%"); idx >= 0 {
+		value = value[:idx]
+	}
+	value = strings.Trim(value, "[]")
+	return net.ParseIP(value) != nil
 }
 
 // extractQuotedString extracts a string from double quotes in a line.

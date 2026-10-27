@@ -1,14 +1,16 @@
 package handlers
 
 import (
+	"reflect"
 	"testing"
 )
 
 func TestParseNetshDNSServers(t *testing.T) {
 	tests := []struct {
-		name     string
-		input    string
-		expected int
+		name        string
+		input       string
+		expected    int
+		wantServers []string
 	}{
 		{
 			name: "DHCP DNS",
@@ -16,14 +18,16 @@ func TestParseNetshDNSServers(t *testing.T) {
     DNS servers configured through DHCP:  202.204.52.94
                                           202.204.52.89
     Register with which suffix:           Primary only`,
-			expected: 1,
+			expected:    1,
+			wantServers: []string{"202.204.52.94", "202.204.52.89"},
 		},
 		{
 			name: "Static DNS",
 			input: `Configuration for interface "WiFi"
     Statically Configured DNS Servers:    1.1.1.1
     Register with which suffix:           Primary only`,
-			expected: 1,
+			expected:    1,
+			wantServers: []string{"1.1.1.1"},
 		},
 		{
 			name: "Mixed DNS",
@@ -31,7 +35,8 @@ func TestParseNetshDNSServers(t *testing.T) {
     DNS servers configured through DHCP:  8.8.8.8
     Statically Configured DNS Servers:    1.1.1.1
     Register with which suffix:           Primary only`,
-			expected: 1,
+			expected:    1,
+			wantServers: []string{"8.8.8.8", "1.1.1.1"},
 		},
 	}
 
@@ -47,6 +52,9 @@ func TestParseNetshDNSServers(t *testing.T) {
 			}
 			if len(entries) > 0 && len(entries[0].Servers) == 0 {
 				t.Error("expected servers to be non-empty")
+			}
+			if tc.wantServers != nil && !reflect.DeepEqual(entries[0].Servers, tc.wantServers) {
+				t.Errorf("servers = %v, want %v", entries[0].Servers, tc.wantServers)
 			}
 		})
 	}
