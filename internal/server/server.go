@@ -14,6 +14,7 @@ import (
 	"os/signal"
 	"path/filepath"
 	"strings"
+	"sync"
 	"syscall"
 	"time"
 
@@ -25,6 +26,11 @@ import (
 type Server struct {
 	httpServer *http.Server
 	hub        *events.Hub
+	// ready is closed once the listener is bound, so callers can do post-start
+	// work (spawning helper processes) without delaying startup.
+	ready     chan struct{}
+	readyOnce sync.Once
+	boundAddr string
 }
 
 const DefaultAddr = "127.0.0.1:13335"
@@ -44,7 +50,7 @@ func NewServer(addr string) *Server {
 	mux.HandleFunc("/api/v1/settings", handlers.SettingsHandler(hub))
 	mux.HandleFunc("/api/v1/status", handlers.StatusHandler(hub))
 	mux.HandleFunc("/api/v1/version/latest", handlers.LatestVersionHandler())
-	mux.HandleFunc("/ws", handlers.WSHandler(hub, loopbackOrigins(portOfAddr(addr), "http")))
+	mux.HandleFunc("/ws", handlers.WSHandler(hub, loopbackOrigins(listenPort(addr), "http")))
 	// Unknown /api paths must not fall through to the static file handler, which
 	// used to answer them with index.html and status 200.
 	mux.HandleFunc("/api/", handlers.NotFoundHandler())
@@ -70,7 +76,8 @@ func NewServer(addr string) *Server {
 	handler = securityHeadersHandler(handler, addr)
 
 	return &Server{
-		hub: hub,
+		hub:   hub,
+		ready: make(chan struct{}),
 		httpServer: &http.Server{
 			Addr:              addr,
 			Handler:           handler,
@@ -143,7 +150,7 @@ func secureTokenEqual(left, right string) bool {
 // state-changing request without a JSON content type (which a cross-origin
 // HTML form or a "simple" fetch could otherwise send without a preflight).
 func guardHandler(next http.Handler, addr string) http.Handler {
-	allowedPort := portOfAddr(addr)
+	allowedPort := listenPort(addr)
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if !isLoopbackRequestHost(r.Host, allowedPort) {
 			log.Printf("guard: rejected request with host %q from %s", r.Host, r.RemoteAddr)
@@ -191,7 +198,7 @@ const ipv6ProbeOrigin = "https://api-ipv6.ip.sb"
 // page injected third-party (campus portal, plain HTTP) scripts with full
 // access to the privileged local API.
 func securityHeadersHandler(next http.Handler, addr string) http.Handler {
-	policy := contentSecurityPolicy(portOfAddr(addr))
+	policy := contentSecurityPolicy(listenPort(addr))
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		header := w.Header()
 		header.Set("Content-Security-Policy", policy)
@@ -256,6 +263,17 @@ func portOfAddr(addr string) string {
 		return port
 	}
 	return ""
+}
+
+// listenPort is the port the request guard should accept. When the configured
+// port is 0 (ephemeral, used by tests) the real port is only known after Start,
+// so the port comparison is skipped instead of rejecting every request.
+func listenPort(addr string) string {
+	port := portOfAddr(addr)
+	if port == "0" {
+		return ""
+	}
+	return port
 }
 
 // splitRequestHost separates the host and port of r.Host without requiring a
@@ -329,11 +347,21 @@ func isDir(path string) bool {
 const shutdownTimeout = 10 * time.Second
 
 func (s *Server) Start(ctx context.Context) error {
-	// Start server and listen for termination signals
+	// Bind synchronously so a port conflict is reported to the caller instead of
+	// surfacing later as a value on a channel, and so Ready can be signalled
+	// before anything else happens.
+	listener, err := net.Listen("tcp", s.httpServer.Addr)
+	if err != nil {
+		return fmt.Errorf("http listen error: %w", err)
+	}
+	s.boundAddr = listener.Addr().String()
+	log.Printf("Starting HTTP server on %s\n", s.boundAddr)
+
+	s.readyOnce.Do(func() { close(s.ready) })
+
 	lnErr := make(chan error, 1)
 	go func() {
-		log.Printf("Starting HTTP server on %s\n", s.httpServer.Addr)
-		lnErr <- s.httpServer.ListenAndServe()
+		lnErr <- s.httpServer.Serve(listener)
 	}()
 
 	sig := make(chan os.Signal, 1)
@@ -352,6 +380,21 @@ func (s *Server) Start(ctx context.Context) error {
 		return s.shutdown()
 	}
 	return nil
+}
+
+// Ready is closed as soon as the TCP listener is bound and accepting. It is
+// never closed when Start fails to bind.
+func (s *Server) Ready() <-chan struct{} {
+	return s.ready
+}
+
+// Addr returns the address that is actually bound, which differs from the
+// configured one when port 0 was requested.
+func (s *Server) Addr() string {
+	if s.boundAddr != "" {
+		return s.boundAddr
+	}
+	return s.httpServer.Addr
 }
 
 // shutdown stops the listener and waits for in-flight handlers, but never
