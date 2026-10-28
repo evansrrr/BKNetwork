@@ -36,12 +36,12 @@ jobs:
             signing_identity: '-'
     runs-on: ${{ matrix.platform }}
     steps:
-      - uses: actions/checkout@v6
-      - uses: actions/setup-go@v6
+      - uses: actions/checkout@v7
+      - uses: actions/setup-go@v7
         with:
           go-version-file: go.mod
           cache-dependency-path: go.sum
-      - uses: actions/setup-node@v6
+      - uses: actions/setup-node@v7
         with:
           node-version: lts/*
       - uses: dtolnay/rust-toolchain@stable
