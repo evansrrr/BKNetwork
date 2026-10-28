@@ -43,7 +43,7 @@ export const dnsStatusEl = document.getElementById('dnsStatus');
 export const lastUpdatedEl = document.getElementById('lastUpdated');
 export const trafficUsageEl = document.getElementById('trafficUsage');
 export const adapterListEl = document.getElementById('adapterList');
-export const targetAdapterSelects = ['ifName', 'ifName2'].map(id => document.getElementById(id));
+export const targetAdapterSelects = ['ifName2'].map(id => document.getElementById(id));
 export const stackModeButtons = {
   ipv4: document.getElementById('btnIpv4'),
   ipv6: document.getElementById('btnIpv6'),

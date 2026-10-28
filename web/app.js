@@ -148,12 +148,14 @@ function connectWS() {
   activeWs = ws;
 
   ws.addEventListener('open', () => {
+    if (activeWs !== ws) return;
     wsReconnectAttempt = 0;
     setBackendBadge('ok');
     appendLog('WebSocket 已连接');
   });
 
   ws.addEventListener('message', (event) => {
+    if (activeWs !== ws) return;
     try {
       const data = JSON.parse(event.data);
       setBackendBadge(data.type === 'error' ? 'err' : 'ok');
@@ -215,6 +217,7 @@ function connectWS() {
   });
 
   ws.addEventListener('error', () => {
+    if (activeWs !== ws) return;
     setBackendBadge('warn');
   });
 }

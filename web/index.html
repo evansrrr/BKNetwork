@@ -11,7 +11,7 @@
   <div class="mode-switch" aria-label="高级模式切换">
     <span class="label">高级模式</span>
     <label class="toggle" title="切换高级模式">
-      <input id="advancedModeToggle" type="checkbox" />
+      <input id="advancedModeToggle" type="checkbox" aria-label="切换高级模式" />
       <span class="toggle-track" aria-hidden="true"></span>
     </label>
   </div>
@@ -51,7 +51,7 @@
             <div class="setting-note">登录 Windows 后自动启动 BKNetwork</div>
           </div>
           <span class="toggle">
-            <input id="settingAutoStart" type="checkbox" />
+            <input id="settingAutoStart" type="checkbox" aria-label="BKNetwork 开机自启" />
             <span class="toggle-track" aria-hidden="true"></span>
           </span>
         </div>
@@ -61,7 +61,7 @@
             <div class="setting-note">启动时不弹出网页，只保留托盘</div>
           </div>
           <span class="toggle">
-            <input id="settingSilentStart" type="checkbox" />
+            <input id="settingSilentStart" type="checkbox" aria-label="静默启动" />
             <span class="toggle-track" aria-hidden="true"></span>
           </span>
         </div>
@@ -71,7 +71,7 @@
             <div class="setting-note">登录 Windows 后自动启动 WARP 客户端，不自动连接</div>
           </div>
           <span class="toggle">
-            <input id="settingWarpAppAutoStart" type="checkbox" />
+            <input id="settingWarpAppAutoStart" type="checkbox" aria-label="WARP 客户端开机自启" />
             <span class="toggle-track" aria-hidden="true"></span>
           </span>
         </div>
@@ -81,7 +81,7 @@
             <div class="setting-note">不再检查新版本、也不做公网 IPv6 探测（校园网受限时打开）</div>
           </div>
           <span class="toggle">
-            <input id="settingDisableOnlineChecks" type="checkbox" />
+            <input id="settingDisableOnlineChecks" type="checkbox" aria-label="关闭联网检查" />
             <span class="toggle-track" aria-hidden="true"></span>
           </span>
         </div>
@@ -164,7 +164,7 @@
           <div class="easy-mode-state" id="dns64ModeState">当前关闭</div>
         </div>
         <label class="toggle" for="dns64ModeToggle">
-          <input id="dns64ModeToggle" type="checkbox" />
+          <input id="dns64ModeToggle" type="checkbox" aria-label="DNS64 免流模式" />
           <span class="toggle-track" aria-hidden="true"></span>
         </label>
       </div>
@@ -204,7 +204,7 @@
             </div>
             <div class="control-card">
               <div class="control-label">切换 ip 栈协议</div>
-              <div class="mode-select" role="radiogroup" aria-label="网络模式选择">
+              <div class="mode-select" role="group" aria-label="网络模式选择">
                 <button id="btnIpv4" class="mode-option" type="button" data-switch-mode="ipv4" aria-pressed="false">
                   <span class="mode-dot" aria-hidden="true"></span>
                   <span>仅 v4</span>

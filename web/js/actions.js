@@ -290,6 +290,8 @@ export async function applyDns64Mode(enabled) {
     dns64ModeState.pending = null;
     dns64ModeToggleEl.disabled = false;
     setBusy(false);
+    // 与 switchStack 一致：标记切换时刻，丢弃 3s 内迟到的旧 network.status
+    store.lastSwitchTime = Date.now();
     // Fetch fresh status after switch operation to get updated adapter state
     try {
       await refreshStatus(true);
@@ -358,6 +360,9 @@ export async function loadNetworkForLocalCheck() {
   }
   try {
     const res = await fetch('/api/v1/status', { cache: 'no-store' });
+    if (!res.ok) {
+      return null;
+    }
     const data = await res.json();
     return data?.network || null;
   } catch (_) {
@@ -401,6 +406,9 @@ export function startWarpStatusPoll() {
   const poll = async () => {
     try {
       const res = await fetch('/api/v1/warp-status');
+      if (!res.ok) {
+        throw new Error(`HTTP ${res.status}`);
+      }
       const data = await res.json();
       store.warpConnected = !!data.connected;
       store.warpStatusText_ = data.status || '';
@@ -491,6 +499,9 @@ export function refreshTrafficUsage() {
 export async function refreshStatus(force = false) {
   try {
     const res = await fetch('/api/v1/status');
+    if (!res.ok) {
+      throw new Error(`HTTP ${res.status}`);
+    }
     const data = await res.json();
     renderStatus(data, force);
     appendLog('状态已刷新');
@@ -503,6 +514,9 @@ export async function checkAdminStatus() {
   setAdminBadge('warn', '管理员权限检查中');
   try {
     const res = await fetch('/api/v1/status', { cache: 'no-store' });
+    if (!res.ok) {
+      throw new Error(`HTTP ${res.status}`);
+    }
     const data = await res.json();
     if (data.adminError) {
       throw new Error(data.adminError);
@@ -618,6 +632,8 @@ export async function applyEasyMode(enabled) {
       clearPendingToggle('easyMode');
     }
     setBusy(false);
+    // 与 switchStack 一致：标记切换时刻，丢弃 3s 内迟到的旧 network.status
+    store.lastSwitchTime = Date.now();
     // Fetch fresh status after switch operation to get updated adapter state
     try {
       await refreshStatus(true);

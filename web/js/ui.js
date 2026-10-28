@@ -706,7 +706,8 @@ export function escapeHTML(str) {
     .replace(/&/g, '&amp;')
     .replace(/</g, '&lt;')
     .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;');
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
 }
 
 export function fmtTrafficValue(value) {
@@ -733,6 +734,9 @@ export function renderNetwork(network) {
   }
 
   for (const adapter of adapters) {
+    if (!adapter || typeof adapter !== 'object') {
+      continue;
+    }
     const card = document.createElement('article');
     card.className = 'adapter-card';
     card.innerHTML = `
