@@ -107,8 +107,17 @@ func selectHighestReleaseTag(tags []string) (string, bool) {
 	return bestTag, found
 }
 
+// versionHTTPClient is shared by the redirect and API lookups so a repeated
+// check reuses the connection pool instead of paying TCP+TLS setup each time.
+var versionHTTPClient = &http.Client{Timeout: timeoutMedium}
+
 func fetchLatestReleaseTag(ctx context.Context) (string, error) {
-	if tag, err := fetchLatestReleaseTagFromRedirect(ctx); err == nil {
+	// Give the redirect its own budget so a slow redirect cannot consume the
+	// whole lookup and leave the API fallback with no time left.
+	redirectCtx, cancel := context.WithTimeout(ctx, versionRedirectTimeout)
+	tag, err := fetchLatestReleaseTagFromRedirect(redirectCtx)
+	cancel()
+	if err == nil {
 		return tag, nil
 	}
 
@@ -118,14 +127,13 @@ func fetchLatestReleaseTag(ctx context.Context) (string, error) {
 func fetchLatestReleaseTagFromRedirect(ctx context.Context) (string, error) {
 	latestReleaseURL := fmt.Sprintf("https://github.com/%s/releases/latest", buildinfo.Repository)
 
-	client := &http.Client{Timeout: timeoutMedium}
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, latestReleaseURL, nil)
 	if err != nil {
 		return "", err
 	}
 	req.Header.Set("User-Agent", "BKNetwork-Version-Checker")
 
-	resp, err := client.Do(req)
+	resp, err := versionHTTPClient.Do(req)
 	if err != nil {
 		return "", err
 	}
@@ -146,7 +154,6 @@ func fetchLatestReleaseTagFromRedirect(ctx context.Context) (string, error) {
 func fetchLatestReleaseTagFromAPI(ctx context.Context) (string, error) {
 	releasesAPI := fmt.Sprintf("https://api.github.com/repos/%s/releases?per_page=100", buildinfo.Repository)
 
-	client := &http.Client{Timeout: timeoutMedium}
 	apiReq, err := http.NewRequestWithContext(ctx, http.MethodGet, releasesAPI, nil)
 	if err != nil {
 		return "", err
@@ -154,7 +161,7 @@ func fetchLatestReleaseTagFromAPI(ctx context.Context) (string, error) {
 	apiReq.Header.Set("Accept", "application/vnd.github+json")
 	apiReq.Header.Set("User-Agent", "BKNetwork-Version-Checker")
 
-	resp, err := client.Do(apiReq)
+	resp, err := versionHTTPClient.Do(apiReq)
 	if err != nil {
 		return "", err
 	}

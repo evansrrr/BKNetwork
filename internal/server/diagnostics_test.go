@@ -52,6 +52,27 @@ func TestRequestIDRejectsOverlongValue(t *testing.T) {
 	}
 }
 
+func TestRequestIDRejectsControlCharacters(t *testing.T) {
+	server := NewServer("")
+
+	for _, value := range []string{
+		"abc123\r\nInjected: yes",
+		"abc 123",
+		"abc;drop table",
+		"abc\x00\x01\x02",
+	} {
+		request := httptest.NewRequest(http.MethodGet, "http://127.0.0.1:13335/api/v1/settings", nil)
+		request.Header.Set("X-Request-Id", value)
+		response := httptest.NewRecorder()
+		server.httpServer.Handler.ServeHTTP(response, request)
+
+		got := response.Header().Get("X-Request-Id")
+		if !regexp.MustCompile(`^[0-9a-f]{16}$`).MatchString(got) {
+			t.Fatalf("X-Request-Id for %q = %q, want a generated 16-hex id", value, got)
+		}
+	}
+}
+
 func TestDiagnosticsEndpoint(t *testing.T) {
 	logDir := t.TempDir()
 	t.Setenv("BKNETWORK_LOG_DIR", logDir)

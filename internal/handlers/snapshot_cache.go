@@ -39,6 +39,7 @@ type snapshotCache struct {
 	snap     networkSnapshot
 	err      error
 	inflight *snapshotCall
+	gen      uint64
 }
 
 func newSnapshotCache(ttl time.Duration) *snapshotCache {
@@ -61,12 +62,17 @@ func (c *snapshotCache) get(collect snapshotProvider) (networkSnapshot, error) {
 	}
 	call := &snapshotCall{done: make(chan struct{})}
 	c.inflight = call
+	gen := c.gen
 	c.mu.Unlock()
 
 	snap, err := collect()
 
 	c.mu.Lock()
-	c.snap, c.err, c.at, c.valid = snap, err, c.now(), true
+	// A mutation invalidated the cache while this collection was in flight:
+	// the result is already stale, so it must not be re-cached as valid.
+	if c.gen == gen {
+		c.snap, c.err, c.at, c.valid = snap, err, c.now(), true
+	}
 	c.inflight = nil
 	c.mu.Unlock()
 
@@ -89,6 +95,7 @@ func (c *snapshotCache) fresh() bool {
 // It is used after a mutation instead of waiting for the TTL to expire.
 func (c *snapshotCache) invalidate() {
 	c.mu.Lock()
+	c.gen++
 	c.valid = false
 	c.at = time.Time{}
 	c.mu.Unlock()

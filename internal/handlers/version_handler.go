@@ -21,6 +21,9 @@ const (
 	// versionTimeout bounds one release lookup. It is shorter than timeoutMedium
 	// because the UI only shows a hint; a slow network should not hold it.
 	versionTimeout = 6 * time.Second
+	// versionRedirectTimeout bounds only the /releases/latest redirect hop, so a
+	// slow redirect still leaves the API fallback a share of the overall budget.
+	versionRedirectTimeout = 3 * time.Second
 )
 
 // versionTagCache caches the latest release tag and collapses concurrent

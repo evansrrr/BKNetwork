@@ -5,6 +5,7 @@ package main
 
 import (
 	"context"
+	"fmt"
 	"log"
 	"os"
 	"os/signal"
@@ -97,15 +98,24 @@ func runConsole(cfg appsettings.Settings) error {
 	defer stop()
 
 	srv := server.NewServer("")
+	startErr := make(chan error, 1)
 	go func() {
-		if err := srv.Start(ctx); err != nil {
-			log.Println("server error:", err)
-			stop()
-		}
+		startErr <- srv.Start(ctx)
 	}()
 	startWarpIfEnabled(cfg)
 
-	<-ctx.Done()
+	select {
+	case <-ctx.Done():
+		// Interrupted normally.
+	case err := <-startErr:
+		// Start returned before the interrupt: a bind failure (including a
+		// refused non-loopback bind) must surface as a non-zero exit instead of
+		// being swallowed as a clean exit 0.
+		if err != nil {
+			return fmt.Errorf("server: %w", err)
+		}
+	}
+
 	shutdownCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 	return srv.Shutdown(shutdownCtx)

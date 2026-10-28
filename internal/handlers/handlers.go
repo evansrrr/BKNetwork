@@ -488,8 +488,8 @@ func StatusHandler(hub *events.Hub) http.HandlerFunc {
 		if adminErr != nil {
 			adminErrMsg = adminErr.Error()
 		}
-		network, _ := getNetworkSnapshot()
-		writeJSON(w, map[string]interface{}{
+		network, snapErr := getNetworkSnapshot()
+		response := map[string]interface{}{
 			"service": map[string]interface{}{
 				"name":    "BKNetwork",
 				"version": buildinfo.Version,
@@ -502,6 +502,12 @@ func StatusHandler(hub *events.Hub) http.HandlerFunc {
 			"lastEvent": lastEvent,
 			"network":   network,
 			"time":      time.Now().Format(time.RFC3339),
-		}, http.StatusOK)
+		}
+		if snapErr != nil {
+			// The UI used to see an empty snapshot and no hint; surface the
+			// collection error so a transient netsh failure is not silent.
+			response["networkError"] = snapErr.Error()
+		}
+		writeJSON(w, response, http.StatusOK)
 	}
 }

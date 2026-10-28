@@ -73,6 +73,45 @@ func TestServerStartReportsBindError(t *testing.T) {
 	}
 }
 
+// fakeAddr lets the loopback helper be tested without opening a socket.
+type fakeAddr string
+
+func (a fakeAddr) Network() string { return "tcp" }
+func (a fakeAddr) String() string  { return string(a) }
+
+func TestIsLoopbackListenAddr(t *testing.T) {
+	for _, tc := range []struct {
+		addr string
+		want bool
+	}{
+		{"127.0.0.1:13335", true},
+		{"[::1]:13335", true},
+		{"localhost:13335", true},
+		{"0.0.0.0:13335", false},
+		{"[::]:13335", false},
+		{"192.168.1.10:13335", false},
+	} {
+		if got := isLoopbackListenAddr(fakeAddr(tc.addr)); got != tc.want {
+			t.Errorf("isLoopbackListenAddr(%q) = %v, want %v", tc.addr, got, tc.want)
+		}
+	}
+}
+
+func TestServerRefusesNonLoopbackBindWithoutToken(t *testing.T) {
+	t.Setenv("BKNETWORK_API_TOKEN", "")
+	server := NewServer("0.0.0.0:0")
+	err := server.Start(context.Background())
+	if err == nil {
+		t.Fatal("expected a non-loopback bind without a token to be refused")
+	}
+
+	select {
+	case <-server.Ready():
+		t.Fatal("Ready must not be closed when the bind is refused")
+	default:
+	}
+}
+
 func TestServerAddrReflectsConfiguredAddressBeforeStart(t *testing.T) {
 	server := NewServer("")
 	if got := server.Addr(); got != DefaultAddr {

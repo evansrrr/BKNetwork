@@ -30,7 +30,14 @@ type Server struct {
 	// work (spawning helper processes) without delaying startup.
 	ready     chan struct{}
 	readyOnce sync.Once
+
+	// mu guards boundAddr, which Start writes and Addr reads.
+	mu        sync.Mutex
 	boundAddr string
+
+	// tokenSet records whether a bootstrap token was configured. A non-loopback
+	// bind is only permitted when one is set.
+	tokenSet bool
 }
 
 const DefaultAddr = "127.0.0.1:13335"
@@ -72,8 +79,10 @@ func NewServer(addr string) *Server {
 	}
 
 	var handler http.Handler = mux
+	var tokenSet bool
 	if token := strings.TrimSpace(os.Getenv("BKNETWORK_API_TOKEN")); token != "" {
 		handler = localAuthHandler(handler, token)
+		tokenSet = true
 	} else {
 		log.Println("warning: BKNETWORK_API_TOKEN is unset; the local API is unauthenticated " +
 			"(cross-site browser requests are still rejected, local processes are not)")
@@ -89,8 +98,9 @@ func NewServer(addr string) *Server {
 	handler = requestIDHandler(handler)
 
 	return &Server{
-		hub:   hub,
-		ready: make(chan struct{}),
+		hub:      hub,
+		ready:    make(chan struct{}),
+		tokenSet: tokenSet,
 		httpServer: &http.Server{
 			Addr:              addr,
 			Handler:           handler,
@@ -111,7 +121,7 @@ func NewServer(addr string) *Server {
 func requestIDHandler(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		id := strings.TrimSpace(r.Header.Get("X-Request-Id"))
-		if len(id) < 8 || len(id) > 64 {
+		if !validRequestID(id) {
 			id = handlers.NewRequestID()
 		}
 		if id != "" {
@@ -120,6 +130,23 @@ func requestIDHandler(next http.Handler) http.Handler {
 		}
 		next.ServeHTTP(w, r)
 	})
+}
+
+// validRequestID accepts only the shape NewRequestID produces, plus hyphens, so
+// a client-controlled value can never smuggle CR/LF or control bytes into the
+// X-Request-Id response header or an audit log line.
+func validRequestID(id string) bool {
+	if len(id) < 8 || len(id) > 64 {
+		return false
+	}
+	for _, r := range id {
+		switch {
+		case r >= 'a' && r <= 'z', r >= 'A' && r <= 'Z', r >= '0' && r <= '9', r == '-':
+		default:
+			return false
+		}
+	}
+	return true
 }
 
 func localAuthHandler(next http.Handler, token string) http.Handler {
@@ -383,8 +410,17 @@ func (s *Server) Start(ctx context.Context) error {
 	if err != nil {
 		return fmt.Errorf("http listen error: %w", err)
 	}
-	s.boundAddr = listener.Addr().String()
-	log.Printf("Starting HTTP server on %s\n", s.boundAddr)
+	boundAddr := listener.Addr().String()
+	// The API is meant to be local-only. A non-loopback bind (for example
+	// BKNETWORK_LISTEN_ADDR=0.0.0.0:13335) would expose the privileged network
+	// controls to the whole network, so it is only permitted when a bootstrap
+	// token is configured.
+	if !s.tokenSet && !isLoopbackListenAddr(listener.Addr()) {
+		listener.Close()
+		return fmt.Errorf("refusing non-loopback bind %s without BKNETWORK_API_TOKEN", boundAddr)
+	}
+	s.setBoundAddr(boundAddr)
+	log.Printf("Starting HTTP server on %s\n", boundAddr)
 
 	s.readyOnce.Do(func() { close(s.ready) })
 
@@ -420,10 +456,28 @@ func (s *Server) Ready() <-chan struct{} {
 // Addr returns the address that is actually bound, which differs from the
 // configured one when port 0 was requested.
 func (s *Server) Addr() string {
+	s.mu.Lock()
+	defer s.mu.Unlock()
 	if s.boundAddr != "" {
 		return s.boundAddr
 	}
 	return s.httpServer.Addr
+}
+
+func (s *Server) setBoundAddr(addr string) {
+	s.mu.Lock()
+	s.boundAddr = addr
+	s.mu.Unlock()
+}
+
+// isLoopbackListenAddr reports whether a bound listener is confined to a
+// loopback interface.
+func isLoopbackListenAddr(addr net.Addr) bool {
+	host, _, err := net.SplitHostPort(addr.String())
+	if err != nil {
+		return false
+	}
+	return isLoopbackHost(host)
 }
 
 // shutdown stops the listener and waits for in-flight handlers, but never

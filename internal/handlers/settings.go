@@ -3,6 +3,7 @@ package handlers
 import (
 	"encoding/json"
 	"fmt"
+	"log"
 	"net/http"
 	"strconv"
 	"strings"
@@ -105,7 +106,11 @@ func applySettingsChange(prev, next appsettings.Settings, effects settingsSideEf
 
 func revertSettings(undo []func() error) {
 	for i := len(undo) - 1; i >= 0; i-- {
-		_ = undo[i]()
+		if err := undo[i](); err != nil {
+			// The stored settings and the system can now disagree; log it so a
+			// failure is not silently left half-applied.
+			log.Printf("settings rollback failed: %v", err)
+		}
 	}
 }
 

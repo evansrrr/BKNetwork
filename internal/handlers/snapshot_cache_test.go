@@ -83,6 +83,47 @@ func TestSnapshotCacheInvalidateForcesCollect(t *testing.T) {
 	}
 }
 
+// TestSnapshotCacheInvalidateDuringInflight covers the race where a mutation
+// invalidates the cache while a collection is still in flight. The stale result
+// must not be re-cached as valid, or the status poll would keep serving the
+// pre-mutation snapshot for the whole TTL.
+func TestSnapshotCacheInvalidateDuringInflight(t *testing.T) {
+	cache := newSnapshotCache(time.Minute)
+
+	var calls int32
+	release := make(chan struct{})
+	collect := func() (networkSnapshot, error) {
+		if atomic.AddInt32(&calls, 1) == 1 {
+			<-release
+		}
+		return networkSnapshot{CollectedAt: "snap"}, nil
+	}
+
+	firstDone := make(chan struct{})
+	go func() {
+		_, _ = cache.get(collect)
+		close(firstDone)
+	}()
+	time.Sleep(50 * time.Millisecond) // let the collection enter collect()
+
+	cache.invalidate()
+	close(release)
+	<-firstDone
+
+	if got := atomic.LoadInt32(&calls); got != 1 {
+		t.Fatalf("collector called %d times, want 1 before the invalidated get", got)
+	}
+
+	// The stale in-flight result must not have been re-cached as valid, so the
+	// next get collects again.
+	if _, err := cache.get(collect); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if got := atomic.LoadInt32(&calls); got != 2 {
+		t.Fatalf("collector called %d times after invalidate-during-inflight, want 2", got)
+	}
+}
+
 func TestSnapshotCacheRetriesErrorsSooner(t *testing.T) {
 	clock := &fakeClock{t: time.Unix(0, 0)}
 	cache := newSnapshotCache(time.Minute)
