@@ -17,8 +17,8 @@ jobs:
     name: Go (linux, race detector)
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v6
-      - uses: actions/setup-go@v6
+      - uses: actions/checkout@v7
+      - uses: actions/setup-go@v7
         with:
           go-version-file: go.mod
           cache-dependency-path: go.sum
@@ -38,7 +38,7 @@ jobs:
           # Floor, not a target: it only stops a silent slide. Raise it as the
           # suite grows rather than lowering it.
           awk -v c="$total" 'BEGIN { if (c + 0 < 35) { printf "coverage %.1f%% is below the 35%% floor\n", c; exit 1 } }'
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: go-coverage
           path: coverage.out
@@ -51,8 +51,8 @@ jobs:
     # linux job above cannot even build the Windows specific files.
     runs-on: windows-latest
     steps:
-      - uses: actions/checkout@v6
-      - uses: actions/setup-go@v6
+      - uses: actions/checkout@v7
+      - uses: actions/setup-go@v7
         with:
           go-version-file: go.mod
           cache-dependency-path: go.sum
@@ -69,8 +69,8 @@ jobs:
     name: Frontend checks
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v6
-      - uses: actions/setup-node@v6
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
         with:
           node-version: '22'
       - name: Syntax, CSP markup and element ids
@@ -84,8 +84,8 @@ jobs:
     # network to the Go module proxy), so its baseline is not known yet.
     continue-on-error: true
     steps:
-      - uses: actions/checkout@v6
-      - uses: actions/setup-go@v6
+      - uses: actions/checkout@v7
+      - uses: actions/setup-go@v7
         with:
           go-version-file: go.mod
           cache-dependency-path: go.sum
@@ -98,8 +98,8 @@ jobs:
     # advisory in the standard library does not block an unrelated fix.
     continue-on-error: true
     steps:
-      - uses: actions/checkout@v6
-      - uses: actions/setup-go@v6
+      - uses: actions/checkout@v7
+      - uses: actions/setup-go@v7
         with:
           go-version-file: go.mod
           cache-dependency-path: go.sum
@@ -119,8 +119,8 @@ jobs:
             target: aarch64-apple-darwin
     runs-on: ${{ matrix.platform }}
     steps:
-      - uses: actions/checkout@v6
-      - uses: actions/setup-go@v6
+      - uses: actions/checkout@v7
+      - uses: actions/setup-go@v7
         with:
           go-version-file: go.mod
           cache-dependency-path: go.sum
