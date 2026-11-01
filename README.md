@@ -1,3 +1,11 @@
+> [!IMPORTANT]
+>
+> # 本项目进入维护模式
+>
+> 项目已进入维护模式，后续仅进行必要的维护与重大问题修复，不再主动开发新功能
+>
+> 新功能及后续版本请移步 [FreeV6](https://github.com/evansrrr/free-v6)
+
 <div align="center">
 <img alt="logo" height="100" width="100" src="web/favicon.svg" />
 <h2> BKNetwork </h2>
@@ -20,10 +28,6 @@
 <br />
 
 ![preview.webp](https://imgs.ich.cc.cd/file/public/1784371816472_preview.webp)
-
-> [!TIP]
->
-> 本项目即将进入维护模式，新功能请移步 [FreeV6](https://github.com/evansrrr/free-v6)
 
 ## 说明
 
