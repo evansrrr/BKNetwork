@@ -237,6 +237,17 @@ func TestMergeUniqueStrings(t *testing.T) {
 	}
 }
 
+func TestMergeAdapterMetadataSkipsLoopback(t *testing.T) {
+	state := netshInterfaceState{Index: map[string]string{
+		"1": "Loopback Pseudo-Interface 1",
+		"5": "以太网 5",
+	}}
+	got := mergeAdapterMetadata(nil, state)
+	if len(got) != 1 || got[0].Name != "以太网 5" {
+		t.Fatalf("mergeAdapterMetadata() = %+v, want only 以太网 5", got)
+	}
+}
+
 // waitFor polls condition until it holds or a short deadline expires.
 func waitFor(t *testing.T, condition func() bool) {
 	t.Helper()

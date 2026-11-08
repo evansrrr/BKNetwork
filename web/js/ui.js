@@ -619,10 +619,16 @@ export function isWarpAdapterName(name) {
   return n.includes('warp') || n.includes('cloudflare');
 }
 
+export function isLoopbackAdapterName(name) {
+  if (typeof name !== 'string') return false;
+  const n = name.trim().toLowerCase();
+  return n === 'loopback' || n.startsWith('loopback ');
+}
+
 export function getAdapterOptions(network) {
   const names = Array.isArray(network?.availableAdapters) ? network.availableAdapters : [];
   if (names.length > 0) {
-    return names.filter(name => typeof name === 'string' && name.trim() !== '');
+    return names.filter(name => typeof name === 'string' && name.trim() !== '' && !isLoopbackAdapterName(name));
   }
   return Array.isArray(network?.adapters)
     ? network.adapters.map(adapter => adapter?.name).filter(name => typeof name === 'string' && name.trim() !== '')
@@ -635,7 +641,7 @@ export function pickDefaultAdapter(options) {
   if (!Array.isArray(options) || options.length === 0) {
     return 'WiFi';
   }
-  const physical = options.find(name => !isWarpAdapterName(name));
+  const physical = options.find(name => !isWarpAdapterName(name) && !isLoopbackAdapterName(name));
   return physical || options[0] || 'WiFi';
 }
 

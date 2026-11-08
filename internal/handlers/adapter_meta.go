@@ -213,6 +213,11 @@ func mergeAdapterMetadata(items []adapterMeta, states ...netshInterfaceState) []
 	}
 	for _, state := range states {
 		for _, name := range state.Index {
+			// netsh lists the loopback interface. Get-NetAdapter does not, so
+			// selecting it makes every stack switch fail with adapter-not-found.
+			if isLoopbackAdapterName(name) {
+				continue
+			}
 			key := strings.ToLower(name)
 			if _, ok := seen[key]; ok {
 				continue
@@ -225,6 +230,13 @@ func mergeAdapterMetadata(items []adapterMeta, states ...netshInterfaceState) []
 		return strings.ToLower(merged[i].Name) < strings.ToLower(merged[j].Name)
 	})
 	return merged
+}
+
+// isLoopbackAdapterName reports the netsh loopback interface. It is not a
+// network adapter Windows will bind IPv4 or IPv6 on.
+func isLoopbackAdapterName(name string) bool {
+	n := strings.ToLower(strings.TrimSpace(name))
+	return n == "loopback" || strings.HasPrefix(n, "loopback ")
 }
 
 // deriveAdapterStatus reports the link status from the netsh state columns,

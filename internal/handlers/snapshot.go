@@ -344,9 +344,11 @@ func collectNetworkSnapshot() (networkSnapshot, error) {
 
 	availableAdapters := make([]string, 0, len(basics))
 	for _, b := range basics {
-		if name := strings.TrimSpace(b.Name); name != "" {
-			availableAdapters = append(availableAdapters, name)
+		name := strings.TrimSpace(b.Name)
+		if name == "" || isLoopbackAdapterName(name) {
+			continue
 		}
+		availableAdapters = append(availableAdapters, name)
 	}
 	sort.Strings(availableAdapters)
 
