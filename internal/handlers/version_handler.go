@@ -95,13 +95,6 @@ func (c *versionTagCache) get(ctx context.Context) (string, error) {
 	return result, resultErr
 }
 
-// invalidate drops the cached tag, so the next call queries again.
-func (c *versionTagCache) invalidate() {
-	c.mu.Lock()
-	c.valid = false
-	c.mu.Unlock()
-}
-
 var latestReleaseTag = newVersionTagCache(versionCacheTTL, versionErrorTTL, fetchLatestReleaseTag)
 
 // onlineChecksDisabled reports whether the user turned the outbound checks off.
