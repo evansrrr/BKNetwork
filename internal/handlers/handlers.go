@@ -90,7 +90,7 @@ func execWithTimeout(ctx context.Context, name string, args ...string) (string, 
 	cmd := exec.CommandContext(ctx, name, args...)
 	hideCommandWindow(cmd)
 	out, err := cmd.CombinedOutput()
-	return string(out), err
+	return decodeCommandOutput(out), err
 }
 
 func notify(hub *events.Hub, typ, msg string, data interface{}) {
