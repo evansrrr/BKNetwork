@@ -89,7 +89,11 @@ jobs:
         with:
           go-version-file: go.mod
           cache-dependency-path: go.sum
-      - run: go run honnef.co/go/tools/cmd/staticcheck@latest ./...
+      # Pinned: staticcheck v0.8 and later require Go 1.26, while setup-go takes
+      # the toolchain from go.mod (1.25) and keeps GOTOOLCHAIN=local, so a plain
+      # @latest fails to resolve before the linter runs. Bump this pin together
+      # with the go directive, not on its own.
+      - run: go run honnef.co/go/tools/cmd/staticcheck@v0.7.0 ./...
 
   vulnerabilities:
     name: govulncheck (advisory)
@@ -103,7 +107,9 @@ jobs:
         with:
           go-version-file: go.mod
           cache-dependency-path: go.sum
-      - run: go run golang.org/x/vuln/cmd/govulncheck@latest ./...
+      # Pinned for the same reason as staticcheck: x/vuln v1.8 and later require
+      # Go 1.26, which the toolchain from go.mod does not provide.
+      - run: go run golang.org/x/vuln/cmd/govulncheck@v1.7.0 ./...
 
   tauri:
     name: Tauri checks (${{ matrix.name }})
