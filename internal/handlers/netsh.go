@@ -199,6 +199,15 @@ func isWarpAdapterName(name string) bool {
 	return strings.Contains(n, "warp") || strings.Contains(n, "cloudflare")
 }
 
+// isLoopbackAdapterName reports the netsh loopback pseudo-interface. It is not a
+// network adapter Windows binds IPv4 or IPv6 on, and Get-NetAdapter does not
+// list it, so a switch that targets it fails with adapter-not-found. The name is
+// system defined and not localized.
+func isLoopbackAdapterName(name string) bool {
+	n := strings.ToLower(strings.TrimSpace(name))
+	return n == "loopback" || strings.HasPrefix(n, "loopback ")
+}
+
 // defaultRouteCandidate holds one default-route entry parsed from the route table.
 type defaultRouteCandidate struct {
 	name    string

@@ -213,6 +213,14 @@ func mergeAdapterMetadata(items []adapterMeta, states ...netshInterfaceState) []
 	}
 	for _, state := range states {
 		for _, name := range state.Index {
+			// netsh lists the loopback pseudo-interface, Get-NetAdapter does
+			// not. Letting it in produces a selectable adapter that every
+			// stack switch rejects. Adapters that Get-NetAdapter reported are
+			// kept even when their name starts with "Loopback": they are real
+			// devices, and this loop only adds the netsh-only ones.
+			if isLoopbackAdapterName(name) {
+				continue
+			}
 			key := strings.ToLower(name)
 			if _, ok := seen[key]; ok {
 				continue

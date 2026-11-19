@@ -180,6 +180,33 @@ func TestMergeAdapterMetadataAddsUnknownAdapters(t *testing.T) {
 	}
 }
 
+// netsh lists the loopback pseudo-interface, Get-NetAdapter does not. Keeping it
+// in the list makes it selectable, and every stack switch on it fails.
+func TestMergeAdapterMetadataSkipsNetshLoopback(t *testing.T) {
+	state := newNetshInterfaceState()
+	state.Index["1"] = "Loopback Pseudo-Interface 1"
+	state.Index["5"] = "以太网 5"
+
+	merged := mergeAdapterMetadata(nil, state)
+	if len(merged) != 1 || merged[0].Name != "以太网 5" {
+		t.Fatalf("merged = %+v, want only 以太网 5", merged)
+	}
+}
+
+// A real adapter can be named "Loopback ..." (for example a renamed KM-TEST
+// loopback adapter). It comes from Get-NetAdapter, so the filter must keep it.
+func TestMergeAdapterMetadataKeepsRealLoopbackAdapter(t *testing.T) {
+	metas := []adapterMeta{{Name: "Loopback 2", MacAddress: "aa"}}
+	state := newNetshInterfaceState()
+	state.Index["1"] = "Loopback Pseudo-Interface 1"
+	state.Index["7"] = "Loopback 2"
+
+	merged := mergeAdapterMetadata(metas, state)
+	if len(merged) != 1 || merged[0].Name != "Loopback 2" || merged[0].MacAddress != "aa" {
+		t.Fatalf("merged = %+v, want the real Loopback 2 adapter to survive", merged)
+	}
+}
+
 func TestDeriveAdapterStatus(t *testing.T) {
 	ipv4 := newNetshInterfaceState()
 	ipv4.Connected["WiFi"] = true
