@@ -77,12 +77,11 @@ jobs:
         run: node scripts/check-frontend.mjs
 
   static-analysis:
-    name: Staticcheck (advisory)
+    name: Staticcheck
     runs-on: ubuntu-latest
-    # Advisory until the first green run on main; then drop continue-on-error so
-    # it gates. The linter could not be run locally while writing this (no
-    # network to the Go module proxy), so its baseline is not known yet.
-    continue-on-error: true
+    # Green on main since the toolchain and the pins below were updated, which
+    # was the condition this job was waiting for: it now gates, so a new finding
+    # blocks the change that introduces it.
     steps:
       - uses: actions/checkout@v6
       - uses: actions/setup-go@v6
@@ -95,11 +94,10 @@ jobs:
       - run: go run honnef.co/go/tools/cmd/staticcheck@v0.8.2 ./...
 
   vulnerabilities:
-    name: govulncheck (advisory)
+    name: govulncheck
     runs-on: ubuntu-latest
-    # Same reasoning as static-analysis: report first, gate later, so a new
-    # advisory in the standard library does not block an unrelated fix.
-    continue-on-error: true
+    # Same as static-analysis: it gates now. The report only covers
+    # vulnerabilities the code actually calls, so a hit is actionable.
     steps:
       - uses: actions/checkout@v6
       - uses: actions/setup-go@v6
