@@ -16,13 +16,15 @@
 <br />
 
 <a href="https://github.com/evansrrr/BKNetwork/stargazers">
-<img alt="Stargazers" src="https://img.shields.io/github/stars/evansrrr/BKNetwork?style=for-the-badge&logo=github&color=f4dbd6&logoColor=D9E0EE&labelColor=302D41"></a>
+<img alt="Stargazers" src="https://img.shields.io/github/stars/evansrrr/BKNetwork?style=for-the-badge&logo=github&color=f9e2af&logoColor=D9E0EE&labelColor=302D41" /></a>
 <a href="https://github.com/evansrrr/BKNetwork/releases/latest">
-<img alt="Releases" src="https://img.shields.io/github/release/evansrrr/BKNetwork.svg?style=for-the-badge&logo=semantic-release&color=f5bde6&logoColor=D9E0EE&labelColor=302D41"/></a>
-<a href="https://github.com/evansrrr/BKNetwork/LICENSE">
-<img alt="License" src="https://img.shields.io/github/license/evansrrr/BKNetwork?style=for-the-badge&logo=conventionalcommits&color=ee99a0&logoColor=D9E0EE&labelColor=302D41"></a>
+<img alt="Releases" src="https://img.shields.io/github/release/evansrrr/BKNetwork.svg?style=for-the-badge&logo=semantic-release&color=cba6f7&logoColor=D9E0EE&labelColor=302D41" /></a>
+<a href="https://github.com/evansrrr/BKNetwork/releases">
+<img alt="Downloads" src="https://img.shields.io/github/downloads/evansrrr/BKNetwork/total?style=for-the-badge&logo=github&color=a6e3a1&logoColor=D9E0EE&labelColor=302D41" /></a>
+<a href="https://github.com/evansrrr/BKNetwork/blob/main/LICENSE">
+<img alt="License" src="https://img.shields.io/github/license/evansrrr/BKNetwork?style=for-the-badge&logo=opensourceinitiative&color=94e2d5&logoColor=D9E0EE&labelColor=302D41" /></a>
 <a href="https://github.com/evansrrr/BKNetwork/issues">
-<img alt="Issues" src="https://img.shields.io/github/issues/evansrrr/BKNetwork?style=for-the-badge&color=a6da95"></a>
+<img alt="Issues" src="https://img.shields.io/github/issues/evansrrr/BKNetwork?style=for-the-badge&logo=github&color=eba0ac&logoColor=D9E0EE&labelColor=302D41" /></a>
 </div>
 
 <br />
@@ -214,3 +216,13 @@ git push origin v1.2.0
   Hikio，Anon，清风，Anon，SanchoTian，Gordon，·，Debuci，听枫
 
 感谢他们的支持，新功能请移步 [FreeV6](https://github.com/evansrrr/free-v6)
+
+## Star History
+
+<a href="https://www.star-history.com/?repos=evansrrr%2Fbknetwork&type=date&legend=top-left">
+ <picture>
+   <source media="(prefers-color-scheme: dark)" srcset="https://api.star-history.com/chart?repos=evansrrr/bknetwork&type=date&theme=dark&legend=top-left" />
+   <source media="(prefers-color-scheme: light)" srcset="https://api.star-history.com/chart?repos=evansrrr/bknetwork&type=date&legend=top-left" />
+   <img alt="Star History Chart" src="https://api.star-history.com/chart?repos=evansrrr/bknetwork&type=date&legend=top-left" />
+ </picture>
+</a>
