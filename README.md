@@ -40,6 +40,8 @@
 
 在 [Releases](https://github.com/evansrrr/BKNetwork/releases/latest) 下载对应平台的安装包。Windows 首次打开可能需要在系统提示中选择继续运行；macOS 首次打开可右键应用选择“打开”，或在“系统设置 → 隐私与安全性”中允许打开。这是因为软件没有签名，不必担心。如果遇到提示需要管理员权限，请选择同意。
 
+Windows 界面依赖 WebView2 运行时（Windows 11 自带；Windows 10 部分精简系统可能没有）。安装包在安装时会联网下载安装 WebView2 引导组件，离线环境请先从微软官网下载 [Evergreen Standalone Installer](https://developer.microsoft.com/microsoft-edge/webview2/) 预装，否则应用会安装成功但界面空白。
+
 运行软件后会在系统托盘/菜单栏显示图标，单击可打开界面，右键点击可 `退出`。
 
 **免流模式** 包含 `Warp` 和 `DNS64` 两种，开一个就行。切换通常10s内完成，视网络状态好坏
@@ -97,7 +99,7 @@ Cloudflare Warp 软件下载页面（1.1.1.1）大陆地区目前无法访问，
 
 **Tauri 桌面端**
 
-需要 Go 1.25+、Rust stable 和平台对应的 Tauri 系统依赖。Windows 还需要 Visual Studio C++ Build Tools；macOS 需要 Xcode Command Line Tools。
+需要 Go 1.27+（与 `go.mod` 的 go 指令一致；`GOTOOLCHAIN=auto` 默认值下旧工具链会自动下载所需版本）、Rust stable 和平台对应的 Tauri 系统依赖。Windows 还需要 Visual Studio C++ Build Tools；macOS 需要 Xcode Command Line Tools。
 
 ```bash
 # 安装 Tauri CLI（只需一次）
@@ -110,7 +112,11 @@ cargo tauri dev
 cargo tauri build
 ```
 
-应用版本只需修改 `src-tauri/Cargo.toml` 的 `package.version`；Tauri 配置和 Go sidecar 都会读取这个版本。
+应用版本需要同步修改三处（`go test` 会强制校验一致性，漏改任意一处测试即失败）：
+
+1. `src-tauri/Cargo.toml` 的 `package.version`（安装包与 Release 标签校验使用）
+2. `internal/buildinfo/version.go` 的 `Version`（Go sidecar 与页面状态接口使用）
+3. `web/index.html` 的版本占位（`>vX.Y.Z<`，以及 `styles.css?v=`、`app.js?v=` 缓存参数）
 
 提交前建议启用仓库的 pre-commit hook，暂存的 Go 文件会自动运行 `gofmt`：
 
@@ -142,11 +148,15 @@ GOOS=windows GOARCH=amd64 go build -o bknetwork.exe ./cmd/bknetwork
 
 **以服务方式安装（Windows）**
 
-```bash
+```powershell
 # 以管理员身份打开 PowerShell
-.\bknetwork.exe install
-.\bknetwork.exe start
+.\bknetwork.exe install    # 注册服务（不会自动启动）
+net start BKNetwork        # 启动服务
+net stop BKNetwork         # 停止服务
+.\bknetwork.exe uninstall  # 卸载服务
 ```
+
+> 注意：`bknetwork.exe` 不支持 `start`/`stop` 参数（会被忽略并转入前台运行，关闭终端后进程即退出）；服务生命周期请用 `net start` / `net stop`，或运行 `services.msc` 管理。
 
 改变网络绑定或控制 `warp-cli` 的命令需要以管理员权限执行，接口会在权限不足或命令不可用时返回错误信息并通过 WebSocket 发布事件
 
@@ -183,14 +193,14 @@ node scripts/check-frontend.mjs     # 前端模块语法、导入关系、CSP �
   - `go`（linux）：gofmt 等价比对、`go vet`、`go test -race`、覆盖率（下限 35%）、构建
   - `go-windows`：完整测试与构建（大部分逻辑是 Windows 专属，只有这个 job 会真正编译它们），并以 `CGO_ENABLED=0` 构建两个可执行文件
   - `frontend`：`scripts/check-frontend.mjs`
-  - `static-analysis` / `vulnerabilities`：staticcheck 与 govulncheck，目前为 advisory（首次变绿后改为阻塞）
-  - `tauri`：Rustfmt、Clippy 与两侧 sidecar 构建
+  - `static-analysis` / `vulnerabilities`：staticcheck 与 govulncheck，均为阻塞项（新增问题会使 CI 失败）
+  - `tauri`：Windows x64、macOS Apple Silicon 与 macOS Intel 三个目标的 Rustfmt、Clippy 与两侧 sidecar 构建
 - `.github/dependabot.yml`：Go 模块与 Rust 依赖按周、Actions 按月分组提 PR
 - `.pre-commit-config.yaml`：gofmt、`go vet`、前端检查
 - `.github/workflows/release.yml`：推送与 Cargo 版本一致的 `vX.Y.Z` 标签后，自动创建 GitHub Release，发布 Windows x64 NSIS、macOS Apple Silicon DMG 和 macOS Intel DMG。
 
 ```bash
-# 例：src-tauri/Cargo.toml 与 internal/buildinfo/version.go 都已更新为 1.2.0
+# 例：src-tauri/Cargo.toml、internal/buildinfo/version.go 与 web/index.html 都已更新为 1.2.0
 git tag v1.2.0
 git push origin v1.2.0
 ```
