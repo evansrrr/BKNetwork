@@ -243,7 +243,7 @@ func collectNetworkSnapshot() (networkSnapshot, error) {
 
 	if len(metas) == 0 {
 		return networkSnapshot{
-			CollectedAt:  time.Now().Format(time.RFC3339),
+			CollectedAt:  time.Now().UTC().Format(time.RFC3339),
 			Warp:         warpStatus,
 			WarpSettings: warpSettings,
 		}, fmt.Errorf("adapter list unavailable: %w", metaErr)
@@ -409,7 +409,7 @@ func collectNetworkSnapshot() (networkSnapshot, error) {
 	})
 
 	return networkSnapshot{
-		CollectedAt:       time.Now().Format(time.RFC3339),
+		CollectedAt:       time.Now().UTC().Format(time.RFC3339),
 		Online:            online,
 		Adapters:          adapters,
 		AvailableAdapters: availableAdapters,
@@ -548,7 +548,7 @@ func cachedTCPProbe(ctx context.Context, target string, prober func(context.Cont
 func probeTCPTarget(ctx context.Context, target string) tcpProbeSnapshot {
 	result := tcpProbeSnapshot{
 		Target:    target,
-		CheckedAt: time.Now().Format(time.RFC3339),
+		CheckedAt: time.Now().UTC().Format(time.RFC3339),
 	}
 	start := time.Now()
 	dialer := net.Dialer{Timeout: timeoutDial}

@@ -16,12 +16,12 @@ export function stopFastStatusRefresh() {
 }
 
 export function startFastStatusRefresh(durationMs = 15000, intervalMs = 2000) {
-  const now = Date.now();
+  const now = performance.now();
   fastStatusRefreshState.activeUntil = Math.max(fastStatusRefreshState.activeUntil, now + durationMs);
 
   if (fastStatusRefreshState.intervalId === null) {
     fastStatusRefreshState.intervalId = window.setInterval(() => {
-      if (Date.now() >= fastStatusRefreshState.activeUntil) {
+      if (performance.now() >= fastStatusRefreshState.activeUntil) {
         stopFastStatusRefresh();
         return;
       }
@@ -33,7 +33,7 @@ export function startFastStatusRefresh(durationMs = 15000, intervalMs = 2000) {
     window.clearTimeout(fastStatusRefreshState.stopTimerId);
   }
   fastStatusRefreshState.stopTimerId = window.setTimeout(() => {
-    if (Date.now() >= fastStatusRefreshState.activeUntil) {
+    if (performance.now() >= fastStatusRefreshState.activeUntil) {
       stopFastStatusRefresh();
     }
   }, durationMs);
@@ -291,7 +291,7 @@ export async function applyDns64Mode(enabled) {
     dns64ModeToggleEl.disabled = false;
     setBusy(false);
     // 与 switchStack 一致：标记切换时刻，丢弃 3s 内迟到的旧 network.status
-    store.lastSwitchTime = Date.now();
+    store.lastSwitchAtMonotonic = performance.now();
     // Fetch fresh status after switch operation to get updated adapter state
     try {
       await refreshStatus(true);
@@ -620,7 +620,7 @@ export async function switchStack(mode) {
   showConfigurationToast(stackLabel);
   try {
     await postAction('/api/v1/switch', { ifName, mode });
-    store.lastSwitchTime = Date.now();
+    store.lastSwitchAtMonotonic = performance.now();
     applyOptimisticNetworkState({ adapterMode: mode });
     showConfigurationSuccess();
   } catch (err) {
@@ -741,7 +741,7 @@ export async function applyEasyMode(enabled) {
     }
     setBusy(false);
     // 与 switchStack 一致：标记切换时刻，丢弃 3s 内迟到的旧 network.status
-    store.lastSwitchTime = Date.now();
+    store.lastSwitchAtMonotonic = performance.now();
     // Fetch fresh status after switch operation to get updated adapter state
     try {
       await refreshStatus(true);

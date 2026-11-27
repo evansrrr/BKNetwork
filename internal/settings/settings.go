@@ -66,10 +66,24 @@ func loadFrom(path string) (Settings, error) {
 		// settings disappear. Report it so the caller can decide.
 		return Settings{}, fmt.Errorf("parse settings file %s: %w", path, err)
 	}
-	if cfg.SchemaVersion == 0 {
-		cfg.SchemaVersion = currentSchemaVersion
+	fromVersion := cfg.SchemaVersion
+	if fromVersion == 0 {
+		fromVersion = currentSchemaVersion
 	}
+	applyMigrations(&cfg, fromVersion)
+	cfg.SchemaVersion = currentSchemaVersion
 	return cfg, nil
+}
+
+// applyMigrations upgrades cfg read from disk at fromVersion to the current
+// schema. Add one step per version bump, mutating cfg in place, so settings
+// written by older releases keep loading without falling back to defaults.
+// Values from a newer file load unchanged (unknown JSON fields survive the
+// round-trip); the version field itself is re-stamped on every save, so a
+// downgrade must simply tolerate the newer fields, never reject the file.
+func applyMigrations(cfg *Settings, fromVersion int) {
+	_ = cfg
+	_ = fromVersion
 }
 
 func saveTo(path string, cfg Settings) error {

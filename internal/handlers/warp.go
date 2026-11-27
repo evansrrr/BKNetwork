@@ -15,7 +15,7 @@ import (
 var errUnknownWarpAction = errors.New("unknown warp action")
 
 func probeWarpStatus(ctx context.Context) warpSnapshot {
-	result := warpSnapshot{CheckedAt: time.Now().Format(time.RFC3339)}
+	result := warpSnapshot{CheckedAt: time.Now().UTC().Format(time.RFC3339)}
 	// Newer warp-cli builds accept --json and are parsed first: JSON has a
 	// stable schema, while the text form has changed wording several times.
 	// When the flag is unsupported (or the output is not JSON) the plain text
@@ -45,7 +45,7 @@ func probeWarpStatus(ctx context.Context) warpSnapshot {
 }
 
 func probeWarpSettings(ctx context.Context) warpSettingsSnapshot {
-	result := warpSettingsSnapshot{CheckedAt: time.Now().Format(time.RFC3339)}
+	result := warpSettingsSnapshot{CheckedAt: time.Now().UTC().Format(time.RFC3339)}
 	out, err := execWithTimeout(ctx, warpCLIPath(), "settings")
 	raw := strings.TrimSpace(out)
 	if err != nil && raw == "" {

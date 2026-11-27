@@ -72,6 +72,26 @@ func TestLoadLegacyFileWithoutVersion(t *testing.T) {
 	}
 }
 
+// A file written by a newer release must keep loading: values survive, the
+// version field normalizes to current because every save re-stamps it.
+func TestLoadNewerSchemaVersionKeepsValues(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "settings.json")
+	if err := os.WriteFile(path, []byte(`{"schemaVersion":99,"autoStart":true,"probeTarget":"portal.example:443"}`), 0o600); err != nil {
+		t.Fatalf("write fixture: %v", err)
+	}
+
+	got, err := loadFrom(path)
+	if err != nil {
+		t.Fatalf("loadFrom: %v", err)
+	}
+	if !got.AutoStart || got.ProbeTarget != "portal.example:443" {
+		t.Fatalf("loaded settings = %+v, want the stored values", got)
+	}
+	if got.SchemaVersion != currentSchemaVersion {
+		t.Fatalf("schemaVersion = %d, want %d", got.SchemaVersion, currentSchemaVersion)
+	}
+}
+
 func TestLoadRejectsCorruptFile(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "settings.json")
 	if err := os.WriteFile(path, []byte(`{"autoStart": tru`), 0o600); err != nil {

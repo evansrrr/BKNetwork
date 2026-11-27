@@ -23,7 +23,7 @@ func collectDarwinNetworkSnapshot() (networkSnapshot, error) {
 	defer cancel()
 	services, err := listDarwinNetworkServices(ctx)
 	if err != nil {
-		return networkSnapshot{CollectedAt: time.Now().Format(time.RFC3339)}, err
+		return networkSnapshot{CollectedAt: time.Now().UTC().Format(time.RFC3339)}, err
 	}
 
 	var warpStatus warpSnapshot
@@ -62,7 +62,7 @@ func collectDarwinNetworkSnapshot() (networkSnapshot, error) {
 	})
 
 	return networkSnapshot{
-		CollectedAt:       time.Now().Format(time.RFC3339),
+		CollectedAt:       time.Now().UTC().Format(time.RFC3339),
 		Online:            hasOnlineAdapter(adapters),
 		Adapters:          adapters,
 		AvailableAdapters: available,

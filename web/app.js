@@ -135,6 +135,21 @@ window.addEventListener('keydown', (event) => {
 let activeWs = null;
 let wsReconnectAttempt = 0;
 
+// RFC3339 快照时间戳比较：用 Date.parse 转毫秒后比较。事件与快照可能分别
+// 使用 UTC 与本地时区偏移，字典序在时区不同时不再等于时间序；两者都能解析
+// 时按数值比较，解析失败退回字典序（同源同格式下行为不变）。
+function isStaleSnapshot(collectedAt) {
+  if (!collectedAt) {
+    return false;
+  }
+  const parsed = Date.parse(collectedAt);
+  const last = Date.parse(store.lastNetworkCollectedAt);
+  if (Number.isFinite(parsed) && Number.isFinite(last)) {
+    return parsed <= last;
+  }
+  return collectedAt <= store.lastNetworkCollectedAt;
+}
+
 // 指数退避 + 抖动：服务重启或崩溃时不要每 2 秒集中重连一次
 function nextReconnectDelay() {
   const base = Math.min(30000, 1000 * 2 ** wsReconnectAttempt);
@@ -160,11 +175,11 @@ function connectWS() {
       const data = JSON.parse(event.data);
       setBackendBadge(data.type === 'error' ? 'err' : 'ok');
       if (data.type === 'network.status') {
-        if (Date.now() - store.lastSwitchTime < 3000) {
+        // 单调时钟比较：0 表示从未切换过，不做保护
+        if (store.lastSwitchAtMonotonic !== 0 && performance.now() - store.lastSwitchAtMonotonic < 3000) {
           return;
         }
-        const collectedAt = data.data?.collectedAt || '';
-        if (collectedAt && collectedAt <= store.lastNetworkCollectedAt) {
+        if (isStaleSnapshot(data.data?.collectedAt || '')) {
           return;
         }
         store.lastNetworkCollectedAt = collectedAt;

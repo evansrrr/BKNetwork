@@ -29,7 +29,7 @@ func DiagnosticsHandler() http.HandlerFunc {
 
 		logDir, dirErr := logging.Dir()
 		response := map[string]interface{}{
-			"generatedAt": time.Now().Format(time.RFC3339),
+			"generatedAt": time.Now().UTC().Format(time.RFC3339),
 			"version":     buildinfo.Version,
 			"os":          runtime.GOOS + "/" + runtime.GOARCH,
 			"goVersion":   runtime.Version(),

@@ -549,7 +549,7 @@ func StatusHandler(hub *events.Hub) http.HandlerFunc {
 			},
 			"lastEvent": lastEvent,
 			"network":   network,
-			"time":      time.Now().Format(time.RFC3339),
+			"time":      time.Now().UTC().Format(time.RFC3339),
 		}
 		if snapErr != nil {
 			// The UI used to see an empty snapshot and no hint; surface the

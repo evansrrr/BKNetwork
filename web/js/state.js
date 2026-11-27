@@ -52,7 +52,9 @@ export const store = {
   easyModePendingSuccess: false,
   lastAdapterOptionsSignature: null,
   lastNetworkCollectedAt: '',
-  lastSwitchTime: 0,
+  // 切换保护窗口用 performance.now()（单调时钟）：壁钟会被休眠唤醒后的
+  // NTP 校正向前/向后跳，导致保护窗口意外失效或长时间卡住。
+  lastSwitchAtMonotonic: 0,
 };
 
 export const DNS64_CANDIDATES = [
