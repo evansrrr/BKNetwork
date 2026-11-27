@@ -1,3 +1,11 @@
+/*
+ * 兼容性下限：运行环境为 Tauri WebView（Windows WebView2 / macOS WKWebView）。
+ * flex 布局中的 gap 需要 Safari 14.1（macOS 11.3）；README 声明的 macOS 11
+ * 仅 11.0–11.2 上 flex 间距会塌陷为 0（grid gap 不受影响）。布局大量依赖
+ * flex/grid gap，引入 margin 兜底的复杂度高于收益，故以 14.1 为实际下限。
+ * 其余 macOS 11.0 兼容处理见各处注释（inset 长写、-webkit-backdrop-filter、
+ * -webkit-appearance）。
+ */
 :root {
   color-scheme: light dark;
   --bg: #F5F5F0;
@@ -112,7 +120,7 @@ body.advanced-mode .shell { flex: 1 0 auto; }
 .settings-fab svg { width: 26px; height: 26px; }
 
 .toggle { position: relative; display: inline-flex; align-items: center; cursor: pointer; user-select: none; }
-.toggle input { position: absolute; inset: 0; opacity: 0; margin: 0; cursor: pointer; z-index: 2; }
+.toggle input { position: absolute; top: 0; right: 0; bottom: 0; left: 0; opacity: 0; margin: 0; cursor: pointer; z-index: 2; }
 
 .toggle-track {
   width: 44px; height: 24px; border-radius: 12px;
@@ -188,6 +196,8 @@ input[type="text"], select {
 input[type="text"]:focus, select:focus { border-color: var(--accent); box-shadow: 0 0 0 2px var(--accent-soft); }
 
 select {
+  /* -webkit-appearance 兜底：appearance 简写需要 Safari 15.4 */
+  -webkit-appearance: none;
   appearance: none;
   background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%23999' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'%3E%3C/polyline%3E%3C/svg%3E");
   background-position: calc(100% - 12px) center; background-repeat: no-repeat; padding-right: 36px;
@@ -339,19 +349,22 @@ body.advanced-mode .site-footer { position: static; margin-top: auto; padding: 1
 .operation-toast[data-tone="info"] .operation-toast__title { color: var(--accent-2); }
 
 .settings-overlay {
-  position: fixed; inset: 0; z-index: 30;
+  /* inset 展开为四边长写法：inset 简写需要 Safari 14.1（macOS 11.3），
+     展开后 macOS 11.0–11.2 的遮罩层才不会塌陷 */
+  position: fixed; top: 0; right: 0; bottom: 0; left: 0; z-index: 30;
   display: flex; align-items: center; justify-content: center; padding: 24px;
-  background: rgba(0,0,0,0); backdrop-filter: blur(0px);
+  /* Safari 18 之前只认 -webkit-backdrop-filter，先写前缀再写标准属性 */
+  background: rgba(0,0,0,0); -webkit-backdrop-filter: blur(0px); backdrop-filter: blur(0px);
   opacity: 0; visibility: hidden; pointer-events: none; transform: translateY(8px);
-  transition: opacity var(--dur) ease, transform var(--dur) ease, background var(--dur) ease, backdrop-filter var(--dur) ease, visibility 0s linear var(--dur);
+  transition: opacity var(--dur) ease, transform var(--dur) ease, background var(--dur) ease, -webkit-backdrop-filter var(--dur) ease, backdrop-filter var(--dur) ease, visibility 0s linear var(--dur);
 }
 .settings-overlay.open {
-  background: rgba(0,0,0,0.4); backdrop-filter: blur(4px);
+  background: rgba(0,0,0,0.4); -webkit-backdrop-filter: blur(4px); backdrop-filter: blur(4px);
   opacity: 1; visibility: visible; pointer-events: auto; transform: translateY(0);
-  transition: opacity var(--dur) ease, transform var(--dur) ease, background var(--dur) ease, backdrop-filter var(--dur) ease, visibility 0s;
+  transition: opacity var(--dur) ease, transform var(--dur) ease, background var(--dur) ease, -webkit-backdrop-filter var(--dur) ease, backdrop-filter var(--dur) ease, visibility 0s;
 }
 @media (prefers-color-scheme: light) {
-  .settings-overlay.open { background: rgba(0,0,0,0.3); backdrop-filter: blur(2px); }
+  .settings-overlay.open { background: rgba(0,0,0,0.3); -webkit-backdrop-filter: blur(2px); backdrop-filter: blur(2px); }
 }
 
 .settings-panel { width: min(560px, 100%); border-radius: 16px; border: 1px solid var(--line); background: var(--bg-elev); overflow: hidden; }
