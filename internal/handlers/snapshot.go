@@ -34,6 +34,10 @@ type adapterSnapshot struct {
 	MacAddress  string   `json:"macAddress,omitempty"`
 	IPv4Enabled bool     `json:"ipv4Enabled"`
 	IPv6Enabled bool     `json:"ipv6Enabled"`
+	// IsDefault marks the adapter that currently owns the system default
+	// route. The UI must not guess this from the list order: VMware and VPN
+	// adapters can also be Up with a gateway.
+	IsDefault   bool     `json:"isDefault,omitempty"`
 	FreeFlow    bool     `json:"freeFlow"`
 	IPv4Gateway string   `json:"ipv4Gateway,omitempty"`
 	IPv6Gateway string   `json:"ipv6Gateway,omitempty"`
@@ -320,6 +324,13 @@ func collectNetworkSnapshot() (networkSnapshot, error) {
 		basicNameSet[b.Name] = struct{}{}
 	}
 
+	defaultRoutes := make(map[string]struct{}, 2)
+	for _, name := range []string{ipv4Route.Interface, ipv6Route.Interface} {
+		if name != "" {
+			defaultRoutes[strings.ToLower(name)] = struct{}{}
+		}
+	}
+
 	selected := make(map[string]struct{})
 	// Adapters that own a default route.
 	for _, name := range []string{ipv4Route.Interface, ipv6Route.Interface} {
@@ -355,6 +366,7 @@ func collectNetworkSnapshot() (networkSnapshot, error) {
 		if _, ok := selected[b.Name]; !ok {
 			continue
 		}
+		_, isDefault := defaultRoutes[strings.ToLower(b.Name)]
 		adapterBindings := bindingMap[b.Name]
 		gateway := gateways[b.Name]
 		ipv4 := ipv4Map[b.Name]
@@ -376,6 +388,7 @@ func collectNetworkSnapshot() (networkSnapshot, error) {
 			MacAddress:  b.MacAddress,
 			IPv4Enabled: adapterBindings["ms_tcpip"],
 			IPv6Enabled: adapterBindings["ms_tcpip6"],
+			IsDefault:   isDefault,
 			FreeFlow:    false,
 			IPv4Gateway: gateway.IPv4,
 			IPv6Gateway: gateway.IPv6,

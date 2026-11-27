@@ -77,6 +77,11 @@ func buildSwitchScript(ifName string, wantIPv4, wantIPv6 bool) string {
 
 	b.WriteString("$ErrorActionPreference='Stop';")
 	b.WriteString("$name=" + name + ";")
+	// Escape before handing the name to any cmdlet: Get-NetAdapter -Name,
+	// Enable-NetAdapterBinding -Name and Get-NetAdapterBinding -Name all accept
+	// wildcards, and "*" would otherwise hit every adapter and make the
+	// read-back compare only the last one.
+	b.WriteString("$pattern=[System.Management.Automation.WildcardPattern]::Escape($name);")
 	b.WriteString("$want4=" + psBool(wantIPv4) + ";")
 	b.WriteString("$want6=" + psBool(wantIPv6) + ";")
 	b.WriteString("$code='apply-failed';")
@@ -85,17 +90,22 @@ func buildSwitchScript(ifName string, wantIPv4, wantIPv6 bool) string {
 	// the current state is read (for example a missing adapter).
 	b.WriteString("$was=[pscustomobject]@{ ipv4=$null; ipv6=$null };")
 	b.WriteString("function Set-Binding([string]$id,[bool]$enable) { " +
-		"if ($enable) { Enable-NetAdapterBinding -Name $name -ComponentID $id -Confirm:$false -ErrorAction Stop } " +
-		"else { Disable-NetAdapterBinding -Name $name -ComponentID $id -Confirm:$false -ErrorAction Stop } };")
+		"if ($enable) { Enable-NetAdapterBinding -Name $pattern -ComponentID $id -Confirm:$false -ErrorAction Stop } " +
+		"else { Disable-NetAdapterBinding -Name $pattern -ComponentID $id -Confirm:$false -ErrorAction Stop } };")
 	b.WriteString("function Read-Binding { $m=@{}; " +
-		"Get-NetAdapterBinding -Name $name -ComponentID ms_tcpip,ms_tcpip6 -ErrorAction Stop | " +
+		"Get-NetAdapterBinding -Name $pattern -ComponentID ms_tcpip,ms_tcpip6 -ErrorAction Stop | " +
 		"ForEach-Object { $m[$_.ComponentID]=[bool]$_.Enabled }; return $m };")
 	b.WriteString("try {")
 	// Fail early with a distinguishable code when the adapter does not exist:
 	// without this the script would try to enable a binding on nothing and
 	// return an opaque COM error.
-	b.WriteString(" if (-not (Get-NetAdapter -Name $name -ErrorAction SilentlyContinue)) { " +
-		"$code='adapter-not-found'; throw ('adapter not found: ' + $name) };")
+	b.WriteString(" $adapter=Get-NetAdapter -Name $pattern -ErrorAction SilentlyContinue;")
+	b.WriteString(" if (-not $adapter) { $code='adapter-not-found'; throw ('adapter not found: ' + $name) };")
+	// Changing the bindings of a disconnected adapter reports success but does
+	// nothing for the user's traffic. Restoring "both" stays allowed so a
+	// previous switch can always be undone.
+	b.WriteString(" if (-not ($want4 -and $want6) -and $adapter.Status -and $adapter.Status -ne 'Up') { " +
+		"$code='adapter-not-up'; throw ('adapter is not connected: ' + $name + ' (' + $adapter.Status + ')') };")
 	b.WriteString(" $state=Read-Binding;")
 	b.WriteString(" $was=[pscustomobject]@{ ipv4=$state['ms_tcpip']; ipv6=$state['ms_tcpip6'] };")
 	b.WriteString(" if ($was.ipv4 -ne $want4) { Set-Binding 'ms_tcpip' $want4; $changed += ('ipv4=' + $want4) };")
@@ -183,6 +193,8 @@ func applyNetworkMode(ifName, mode string) (*switchResult, string, error) {
 		switch {
 		case result.Code == "adapter-not-found":
 			return result, out, fmt.Errorf("%w: %s", errAdapterNotFound, ifName)
+		case result.Code == "adapter-not-up":
+			return result, out, fmt.Errorf("%w: %s", errAdapterNotUp, ifName)
 		case result.Error != "" && len(result.Changed) == 0:
 			// Nothing was applied, so there is nothing to restore and the
 			// adapter state cannot be inconsistent.

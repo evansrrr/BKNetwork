@@ -121,7 +121,7 @@ func TestSwitchScriptSimulatedAdapterMissing(t *testing.T) {
 	// Force the "adapter not found" branch without depending on the machine.
 	script := strings.Replace(
 		buildSwitchScript("Missing", true, true),
-		"if (-not (Get-NetAdapter -Name $name -ErrorAction SilentlyContinue))",
+		"if (-not $adapter)",
 		"if ($true)",
 		1,
 	)
@@ -134,5 +134,51 @@ func TestSwitchScriptSimulatedAdapterMissing(t *testing.T) {
 	}
 	if len(calls) != 0 {
 		t.Fatalf("binding calls = %v, want none", calls)
+	}
+}
+
+// replaceAdapterLookup swaps the live Get-NetAdapter call for a fixed adapter
+// state, so the link check can be exercised without touching a real device.
+func replaceAdapterLookup(script, status string) string {
+	return strings.Replace(
+		script,
+		"$adapter=Get-NetAdapter -Name $pattern -ErrorAction SilentlyContinue;",
+		"$adapter=[pscustomobject]@{Name=$name;Status='"+status+"'};",
+		1,
+	)
+}
+
+func TestSwitchScriptRejectsDisconnectedAdapter(t *testing.T) {
+	if _, err := exec.LookPath("powershell"); err != nil {
+		t.Skip("powershell not available")
+	}
+	// mode=ipv6: the user is trying to turn the campus uplink into v6-only.
+	// A disconnected adapter must not report success for that.
+	script := replaceAdapterLookup(buildSwitchScript("Fake Adapter", false, true), "Disconnected")
+	result, calls, err := runSwitchHarness(t, script, true, true, "")
+	if err == nil {
+		t.Fatalf("expected the script to fail, calls=%v", calls)
+	}
+	if result == nil || result.Code != "adapter-not-up" {
+		t.Fatalf("result = %+v, want code adapter-not-up", result)
+	}
+	if len(calls) != 0 {
+		t.Fatalf("binding calls = %v, want none", calls)
+	}
+}
+
+func TestSwitchScriptAllowsRestoreOnDisconnectedAdapter(t *testing.T) {
+	if _, err := exec.LookPath("powershell"); err != nil {
+		t.Skip("powershell not available")
+	}
+	// mode=both is the undo path: an adapter that went offline after a switch
+	// must still be restorable.
+	script := replaceAdapterLookup(buildSwitchScript("Fake Adapter", true, true), "Disconnected")
+	result, _, err := runSwitchHarness(t, script, false, false, "")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if result == nil || !result.OK {
+		t.Fatalf("result = %+v, want ok", result)
 	}
 }

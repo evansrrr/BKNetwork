@@ -140,14 +140,40 @@ func SwitchStackHandler(hub *events.Hub) http.HandlerFunc {
 			return
 		}
 
-		switchRes, out, err := applyNetworkMode(payload.IfName, payload.Mode)
+		// Restoring "both" is allowed on a disconnected adapter so a previous
+		// switch can always be undone; every other mode needs a live target.
+		ifName, err := validateAdapterTarget(r.Context(), payload.IfName, payload.Mode == "both")
+		if err != nil {
+			status, code := adapterValidationStatus(err)
+			audit(r, "switch", map[string]string{
+				"ifName": payload.IfName,
+				"mode":   payload.Mode,
+				"ok":     "false",
+				"code":   code,
+				"detail": err.Error(),
+			})
+			writeJSON(w, map[string]interface{}{
+				"error":  err.Error(),
+				"code":   code,
+				"ifName": payload.IfName,
+			}, status)
+			notify(hub, "switch.error", err.Error(), map[string]interface{}{
+				"request": payload,
+				"code":    code,
+			})
+			return
+		}
+
+		switchRes, out, err := applyNetworkMode(ifName, payload.Mode)
 		// The bindings changed (or were rolled back), so the cached snapshot is
 		// stale for the status poll that follows this request.
 		invalidateNetworkSnapshot()
 		if err != nil {
 			status := http.StatusInternalServerError
-			if errors.Is(err, errAdapterNotFound) || errors.Is(err, errUnknownMode) {
+			if errors.Is(err, errUnknownMode) {
 				status = http.StatusBadRequest
+			} else if mapped, _ := adapterValidationStatus(err); mapped != http.StatusInternalServerError {
+				status = mapped
 			}
 			result := map[string]interface{}{
 				"error":  "command failed",
@@ -165,7 +191,7 @@ func SwitchStackHandler(hub *events.Hub) http.HandlerFunc {
 				result["rolledBack"] = switchRes.RolledBack
 			}
 			audit(r, "switch", map[string]string{
-				"ifName":     payload.IfName,
+				"ifName":     ifName,
 				"mode":       payload.Mode,
 				"ok":         "false",
 				"code":       code,
@@ -199,7 +225,7 @@ func SwitchStackHandler(hub *events.Hub) http.HandlerFunc {
 			notifyData["changed"] = switchRes.Changed
 		}
 		audit(r, "switch", map[string]string{
-			"ifName":  payload.IfName,
+			"ifName":  ifName,
 			"mode":    payload.Mode,
 			"ok":      "true",
 			"changed": strconv.Itoa(changed),
@@ -324,26 +350,48 @@ func DnsHandler(hub *events.Hub) http.HandlerFunc {
 			return
 		}
 
-		if strings.TrimSpace(payload.IfName) == "" {
-			writeJSON(w, map[string]string{"error": "missing ifName"}, http.StatusBadRequest)
-			notify(hub, "dns.error", "missing ifName", payload)
-			return
-		}
 		if payload.IPv4Servers == nil && payload.IPv6Servers == nil {
 			writeJSON(w, map[string]string{"error": "no dns changes provided"}, http.StatusBadRequest)
 			notify(hub, "dns.error", "no dns changes provided", payload)
 			return
 		}
 
-		out, err := applyDnsServers(payload.IfName, payload.IPv4Servers, payload.IPv6Servers)
-		invalidateNetworkSnapshot()
+		// DNS writes go to the same adapter list as stack switches, so the
+		// same wildcard/existence/virtual rules apply.
+		ifName, err := validateAdapterTarget(r.Context(), payload.IfName, false)
 		if err != nil {
+			status, code := adapterValidationStatus(err)
 			audit(r, "dns", map[string]string{
 				"ifName": payload.IfName,
 				"ok":     "false",
+				"code":   code,
 				"detail": err.Error(),
 			})
-			writeJSON(w, map[string]interface{}{"error": "command failed", "detail": err.Error(), "output": out}, http.StatusInternalServerError)
+			writeJSON(w, map[string]interface{}{
+				"error":  err.Error(),
+				"code":   code,
+				"ifName": payload.IfName,
+			}, status)
+			notify(hub, "dns.error", err.Error(), map[string]interface{}{
+				"request": payload,
+				"code":    code,
+			})
+			return
+		}
+
+		out, err := applyDnsServers(ifName, payload.IPv4Servers, payload.IPv6Servers)
+		invalidateNetworkSnapshot()
+		if err != nil {
+			audit(r, "dns", map[string]string{
+				"ifName": ifName,
+				"ok":     "false",
+				"detail": err.Error(),
+			})
+			status := http.StatusInternalServerError
+			if mapped, _ := adapterValidationStatus(err); mapped != http.StatusInternalServerError {
+				status = mapped
+			}
+			writeJSON(w, map[string]interface{}{"error": "command failed", "detail": err.Error(), "output": out}, status)
 			notify(hub, "dns.error", "failed to update dns servers", map[string]interface{}{
 				"request": payload,
 				"detail":  err.Error(),
@@ -353,7 +401,7 @@ func DnsHandler(hub *events.Hub) http.HandlerFunc {
 		}
 
 		audit(r, "dns", map[string]string{
-			"ifName": payload.IfName,
+			"ifName": ifName,
 			"ipv4":   describeDnsServers(payload.IPv4Servers),
 			"ipv6":   describeDnsServers(payload.IPv6Servers),
 			"ok":     "true",

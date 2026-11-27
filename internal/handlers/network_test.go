@@ -63,14 +63,16 @@ func TestBuildSwitchScriptIsTransactional(t *testing.T) {
 	script := buildSwitchScript("WiFi", false, true)
 
 	for _, want := range []string{
-		"Get-NetAdapter -Name $name",      // fail fast on a missing adapter
-		"adapter-not-found",               // distinguishable error code
-		"$was=[pscustomobject]",           // snapshot before changing anything
-		"try {",                           // apply phase
-		"} catch {",                       // rollback phase
-		"$cur['ms_tcpip'] -ne $was.ipv4",  // restore ipv4
-		"$cur['ms_tcpip6'] -ne $was.ipv6", // restore ipv6
-		"$after=Read-Binding",             // verify after applying
+		"Get-NetAdapter -Name $pattern",    // fail fast on a missing adapter
+		"WildcardPattern]::Escape",         // "*" must not reach the cmdlets
+		"adapter-not-found",                // distinguishable error code
+		"adapter-not-up",                   // disconnected adapters are rejected
+		"$was=[pscustomobject]",            // snapshot before changing anything
+		"try {",                            // apply phase
+		"} catch {",                        // rollback phase
+		"$cur['ms_tcpip'] -ne $was.ipv4",   // restore ipv4
+		"$cur['ms_tcpip6'] -ne $was.ipv6",  // restore ipv6
+		"$after=Read-Binding",              // verify after applying
 		"verify-failed",
 		"exit 1",
 	} {

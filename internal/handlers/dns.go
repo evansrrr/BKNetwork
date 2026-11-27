@@ -201,7 +201,9 @@ func setAdapterDnsServers(ifName string, servers []string) (string, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), timeoutApply)
 	defer cancel()
 
-	psCmd := fmt.Sprintf("Set-DnsClientServerAddress -InterfaceAlias '%s' -ServerAddresses %s -Confirm:$false -ErrorAction Stop", escapePowerShellSingleQuotedString(ifName), joinPowerShellStringArray(servers))
+	// Set-DnsClientServerAddress -InterfaceAlias accepts wildcards, so the
+	// name is escaped before it reaches the cmdlet.
+	psCmd := fmt.Sprintf("$pattern=[System.Management.Automation.WildcardPattern]::Escape('%s'); Set-DnsClientServerAddress -InterfaceAlias $pattern -ServerAddresses %s -Confirm:$false -ErrorAction Stop", escapePowerShellSingleQuotedString(ifName), joinPowerShellStringArray(servers))
 	out, err := execWithTimeout(ctx, "powershell", "-NoProfile", "-NonInteractive", "-Command", psCmd)
 	if err != nil {
 		return out, err
