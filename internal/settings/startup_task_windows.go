@@ -79,6 +79,16 @@ func unregisterStartupTask(taskName string) error {
 	if strings.TrimSpace(taskName) == "" {
 		return fmt.Errorf("empty startup task name")
 	}
+	// Probe existence first: when the task is absent there is nothing to do,
+	// and skipping the PowerShell run avoids two real problems. The sync runs
+	// on every launch, so a missing task paid a PowerShell startup each time;
+	// worse, "Get-ScheduledTask -ErrorAction SilentlyContinue" still leaves
+	// $? false at the end of the script, powershell.exe -Command then exits 1
+	// with no output, and every non-elevated start logged a misleading
+	// "unregister scheduled task failed: exit status 1".
+	if !scheduledTaskExists(taskName) {
+		return nil
+	}
 	script := fmt.Sprintf("$task = Get-ScheduledTask -TaskName %s -ErrorAction SilentlyContinue; if ($null -ne $task) { Unregister-ScheduledTask -TaskName %s -Confirm:$false -ErrorAction Stop | Out-Null }", psQuote(taskName), psQuote(taskName))
 	cmd := newHiddenPowerShellCommand(script)
 	if output, err := cmd.CombinedOutput(); err != nil {
@@ -89,6 +99,15 @@ func unregisterStartupTask(taskName string) error {
 		return fmt.Errorf("unregister scheduled task failed: %w", err)
 	}
 	return nil
+}
+
+// scheduledTaskExists reports whether a scheduled task is registered. It uses
+// schtasks instead of PowerShell because exit codes are enough here and it
+// starts an order of magnitude faster.
+func scheduledTaskExists(taskName string) bool {
+	cmd := exec.Command("schtasks.exe", "/Query", "/TN", taskName)
+	cmd.SysProcAttr = &syscall.SysProcAttr{HideWindow: true}
+	return cmd.Run() == nil
 }
 
 func psQuote(value string) string {
