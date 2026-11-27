@@ -624,23 +624,42 @@ export async function applyEasyMode(enabled) {
   }
   setBusy(true);
   let succeeded = false;
+  // Each completed step registers how to undo itself; on failure the steps are
+  // undone in reverse order so easy mode never sticks in a half-applied state.
+  const undoSteps = [];
+  let rollbackFailure = '';
   try {
     if (enabled) {
       await postActionSilently('/api/v1/switch', { ifName, mode: 'ipv6' });
+      undoSteps.push(() => postActionSilently('/api/v1/switch', { ifName, mode: 'both' }));
       await postActionSilently('/api/v1/warp', { action: 'start' });
     } else {
       if (pendingToggleState.warp || getStableWarpValue()) {
         await postActionSilently('/api/v1/warp', { action: 'stop' });
+        undoSteps.push(() => postActionSilently('/api/v1/warp', { action: 'start' }));
       }
       await postActionSilently('/api/v1/switch', { ifName, mode: 'both' });
     }
     succeeded = true;
   } catch (err) {
+    let rollbackLog = [];
+    for (const undo of undoSteps.reverse()) {
+      try {
+        await undo();
+        rollbackLog.push('已回滚');
+      } catch (rollbackErr) {
+        rollbackFailure = `；自动回滚失败（${rollbackErr.message}），请到高级模式手动恢复双栈`;
+        break;
+      }
+    }
+    if (rollbackLog.length > 0 && !rollbackFailure) {
+      rollbackFailure = '；已自动恢复原状态';
+    }
     clearPendingToggle('easyMode');
     easyModeToggleEl.checked = getStableEasyModeValue();
     setText(easyModeStateEl, '切换失败');
-    appendLog(`免流模式切换失败：${err.message}`);
-    showConfigurationFailure(err.message);
+    appendLog(`免流模式切换失败：${err.message}${rollbackFailure}`);
+    showConfigurationFailure(`免流模式切换失败：${err.message}${rollbackFailure}`);
   } finally {
     if (pendingToggleState.easyMode) {
       clearPendingToggle('easyMode');
