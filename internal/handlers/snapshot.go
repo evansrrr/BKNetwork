@@ -28,12 +28,12 @@ type dnsInfo struct {
 }
 
 type adapterSnapshot struct {
-	Name        string   `json:"name"`
-	Status      string   `json:"status"`
-	Description string   `json:"description,omitempty"`
-	MacAddress  string   `json:"macAddress,omitempty"`
-	IPv4Enabled bool     `json:"ipv4Enabled"`
-	IPv6Enabled bool     `json:"ipv6Enabled"`
+	Name        string `json:"name"`
+	Status      string `json:"status"`
+	Description string `json:"description,omitempty"`
+	MacAddress  string `json:"macAddress,omitempty"`
+	IPv4Enabled bool   `json:"ipv4Enabled"`
+	IPv6Enabled bool   `json:"ipv6Enabled"`
 	// IsDefault marks the adapter that currently owns the system default
 	// route. The UI must not guess this from the list order: VMware and VPN
 	// adapters can also be Up with a gateway.
