@@ -1,17 +1,21 @@
-import { adapterListEl, adminBadgeDotEl, adminBadgeEl, advancedModeToggleEl, appVersionEl, backendBadgeDotEl, buttons, dns64ModeStateEl, dns64ModeToggleEl, dnsIpv4InputEl, dnsIpv6InputEl, dnsStatusEl, easyModeStateEl, easyModeToggleEl, freeBadgeDotEl, ipv6CheckDotEl, ipv6CheckTextEl, lastUpdatedEl, logEl, networkBadgeDotEl, operationToastDescEl, operationToastEl, operationToastTitleEl, settingAutoStartEl, settingDisableOnlineChecksEl, settingSilentStartEl, settingWarpAppAutoStartEl, settingsOverlayEl, settingsStatusEl, stackModeButtons, stackModeStateEl, targetAdapterSelects, trafficUsageEl, warpSettingsModeEl, warpSettingsStateEl, warpSettingsTunnelProtocolEl, warpStateEl, warpToggleEl } from './dom.js';
-import { DNS64_CANDIDATES, badgeState, dns64ModeState, dnsEditorState, operationToastState, pendingToggleState, settingsState, store } from './state.js';
+import { adapterListEl, adminBadgeDotEl, adminBadgeEl, advancedModeToggleEl, appVersionEl, backendBadgeDotEl, buttons, dns64ModeStateEl, dns64ModeToggleEl, dnsIpv4InputEl, dnsIpv6InputEl, dnsStatusEl, easyModeStateEl, easyModeToggleEl, easyTargetAdapterEl, freeBadgeDotEl, ipv6CheckDotEl, ipv6CheckTextEl, lastUpdatedEl, logEl, networkBadgeDotEl, operationToastDescEl, operationToastEl, operationToastTitleEl, settingAutoStartEl, settingDisableOnlineChecksEl, settingSilentStartEl, settingWarpAppAutoStartEl, settingsOverlayEl, settingsStatusEl, stackModeButtons, stackModeStateEl, targetAdapterSelects, trafficUsageEl, warpSettingsModeEl, warpSettingsStateEl, warpSettingsTunnelProtocolEl, warpStateEl, warpToggleEl } from './dom.js';
+import { DNS64_CANDIDATES, badgeState, dns64ModeState, dnsEditorState, operationToastState, pendingToggleState, readTargetAdapter, settingsState, store, writeTargetAdapter } from './state.js';
 import { checkForNewVersion, startFastStatusRefresh, stopFastStatusRefresh } from './actions.js';
 
 export function setTargetAdapter(value) {
-  const next = typeof value === 'string' && value.trim() !== '' ? value.trim() : 'WiFi';
+  const next = typeof value === 'string' ? value.trim() : '';
   for (const select of targetAdapterSelects) {
-    if (select) {
+    if (select && next !== '') {
       select.value = next;
     }
+  }
+  if (next !== '') {
+    writeTargetAdapter(next);
   }
   syncEasyModeState(store.latestNetwork);
   syncDnsEditor(store.latestNetwork);
   syncDns64ModeState(store.latestNetwork);
+  syncEasyTargetLabel(store.latestNetwork);
 }
 
 for (const select of targetAdapterSelects) {
@@ -373,10 +377,7 @@ export function getDns64Backup(adapter) {
 }
 
 export function getSelectedAdapter(network) {
-  const ifName = currentIfName();
-  return Array.isArray(network?.adapters)
-    ? network.adapters.find(item => item && item.name === ifName)
-    : null;
+  return resolveTargetAdapter(network).adapter;
 }
 
 export function syncDnsEditor(network, force = false) {
@@ -610,7 +611,7 @@ export function syncEasyModeState(network) {
 
 export function currentIfName() {
   const value = targetAdapterSelects[1]?.value?.trim() || targetAdapterSelects[0]?.value?.trim();
-  return value || 'WiFi';
+  return value || readTargetAdapter();
 }
 
 export function isWarpAdapterName(name) {
@@ -629,25 +630,47 @@ export function getAdapterOptions(network) {
     : [];
 }
 
-// pickDefaultAdapter chooses the best fallback when the current selection is unavailable.
-// Prefer non-WARP physical adapters so auto-selection does not land on the tunnel.
-export function pickDefaultAdapter(options) {
-  if (!Array.isArray(options) || options.length === 0) {
-    return 'WiFi';
-  }
-  const physical = options.find(name => !isWarpAdapterName(name));
-  return physical || options[0] || 'WiFi';
+function isAdapterUp(adapter) {
+  return String(adapter?.status || '').toLowerCase() === 'up';
 }
 
-export function syncTargetAdapterSelects(names) {
-  const options = Array.isArray(names) ? names : [];
-  const signature = options.join('\n');
+// pickDefaultAdapter chooses the uplink, not the first name in the list.
+// VMware, VPN and TAP adapters can also be Up with a gateway, so the backend
+// marks the default-route owner with isDefault.
+export function pickDefaultAdapter(network) {
+  const adapters = Array.isArray(network?.adapters)
+    ? network.adapters.filter(item => item && typeof item.name === 'string' && item.name.trim() !== '')
+    : [];
+  const physical = adapters.filter(item => !isWarpAdapterName(item.name));
+  const onDefaultRoute = physical.find(item => item.isDefault);
+  if (onDefaultRoute) return onDefaultRoute.name;
+  const withGateway = physical.find(item => isAdapterUp(item) && (item.ipv4Gateway || item.ipv6Gateway));
+  if (withGateway) return withGateway.name;
+  const up = physical.find(isAdapterUp);
+  if (up) return up.name;
+  const options = getAdapterOptions(network);
+  return options.find(name => !isWarpAdapterName(name)) || options[0] || '';
+}
+
+export function syncTargetAdapterSelects(network) {
+  const options = getAdapterOptions(network);
+  const adapters = Array.isArray(network?.adapters) ? network.adapters : [];
+  // Include the route/status fields: plugging in a cable or switching Wi-Fi
+  // changes which adapter owns the default route without changing the name
+  // list, and the default must be recomputed then.
+  const routeSignature = adapters
+    .map(item => `${item?.name || ''}:${item?.isDefault ? 1 : 0}:${item?.status || ''}`)
+    .join(',');
+  const signature = options.join('\n') + '|' + routeSignature;
   if (signature === store.lastAdapterOptionsSignature) {
     return;
   }
   store.lastAdapterOptionsSignature = signature;
+
+  const saved = readTargetAdapter();
   const current = currentIfName();
-  const desired = options.includes(current) ? current : pickDefaultAdapter(options);
+  const fallback = pickDefaultAdapter(network);
+  const desired = options.includes(current) ? current : (options.includes(saved) ? saved : fallback);
 
   for (const select of targetAdapterSelects) {
     if (!select) continue;
@@ -655,8 +678,8 @@ export function syncTargetAdapterSelects(names) {
     select.innerHTML = '';
     if (options.length === 0) {
       const option = document.createElement('option');
-      option.value = 'WiFi';
-      option.textContent = 'WiFi';
+      option.value = '';
+      option.textContent = '未检测到网卡';
       select.appendChild(option);
       continue;
     }
@@ -669,8 +692,39 @@ export function syncTargetAdapterSelects(names) {
     select.value = options.includes(previous) ? previous : desired;
   }
 
-  const selected = options.includes(desired) ? desired : pickDefaultAdapter(options);
+  const selected = options.includes(desired) ? desired : (options[0] || '');
   setTargetAdapter(selected);
+}
+
+// resolveTargetAdapter is the single decision point for write paths. It returns
+// the adapter object only when the selected name still maps to an adapter the
+// backend reports as switchable, so switchStack/applyEasyMode cannot act on a
+// stale or wrong name and then claim success.
+export function resolveTargetAdapter(network) {
+  const name = currentIfName();
+  if (!name) {
+    return { name: '', adapter: null, reason: '正在检测目标网卡，请稍候' };
+  }
+  const adapters = Array.isArray(network?.adapters) ? network.adapters : [];
+  const adapter = adapters.find(item => item && item.name === name) || null;
+  if (!adapter) {
+    return { name, adapter: null, reason: `目标网卡“${name}”当前不可用，请到高级模式重新选择` };
+  }
+  return { name, adapter, reason: '' };
+}
+
+export function syncEasyTargetLabel(network) {
+  if (!easyTargetAdapterEl) return;
+  const { name, adapter } = resolveTargetAdapter(network);
+  if (!name) {
+    setText(easyTargetAdapterEl, '目标网卡：检测中…');
+    return;
+  }
+  if (!adapter) {
+    setText(easyTargetAdapterEl, `目标网卡：${name}（不可用，请到高级模式重新选择）`);
+    return;
+  }
+  setText(easyTargetAdapterEl, `目标网卡：${name}`);
 }
 
 export function renderStatus(data, force = false) {
@@ -678,12 +732,13 @@ export function renderStatus(data, force = false) {
   if (version && version !== 'dev') {
     setText(appVersionEl, `v${version.replace(/^v/, '')}`);
   }
-  syncTargetAdapterSelects(getAdapterOptions(data?.network));
+  syncTargetAdapterSelects(data?.network);
   syncWarpSettingsState(data?.network);
   renderNetwork(data?.network);
   updateStatusBadges(data?.network, force);
   syncDnsEditor(data?.network, force);
   syncDns64ModeState(data?.network, force);
+  syncEasyTargetLabel(data?.network);
 }
 
 export function fmtIPList(arr) {
@@ -722,7 +777,8 @@ export function renderTrafficUsage(payload) {
 
 export function renderNetwork(network) {
   store.latestNetwork = network;
-  syncTargetAdapterSelects(getAdapterOptions(network));
+  syncTargetAdapterSelects(network);
+  syncEasyTargetLabel(network);
   adapterListEl.innerHTML = '';
   const adapters = network?.adapters;
   if (!Array.isArray(adapters) || adapters.length === 0) {

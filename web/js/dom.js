@@ -20,6 +20,7 @@ export const warpSettingsModeEl = document.getElementById('warpSettingsMode');
 export const warpSettingsTunnelProtocolEl = document.getElementById('warpSettingsTunnelProtocol');
 export const easyModeToggleEl = document.getElementById('easyModeToggle');
 export const easyModeStateEl = document.getElementById('easyModeState');
+export const easyTargetAdapterEl = document.getElementById('easyTargetAdapter');
 export const dns64ModeToggleEl = document.getElementById('dns64ModeToggle');
 export const dns64ModeStateEl = document.getElementById('dns64ModeState');
 export const settingsOpenBtn = document.getElementById('settingsOpenBtn');

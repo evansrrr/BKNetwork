@@ -142,6 +142,7 @@ body.advanced-mode .shell { flex: 1 0 auto; }
 .easy-mode-title { font-size: 15px; font-weight: 600; margin-bottom: 4px; }
 .easy-mode-desc { color: var(--fg-secondary); font-size: 13px; line-height: 1.5; }
 .easy-mode-state { margin-top: 8px; color: var(--accent); font-size: 12px; font-weight: 500; letter-spacing: 0.02em; text-transform: uppercase; }
+.easy-mode-target { margin-top: 4px; color: var(--fg-secondary); font-size: 12px; }
 
 .hero-main { padding: 28px; min-height: 200px; display: flex; flex-direction: column; justify-content: space-between; position: relative; }
 .eyebrow { letter-spacing: 0.08em; text-transform: uppercase; font-size: 11px; color: var(--accent); font-weight: 600; }

@@ -64,6 +64,29 @@ export const DNS64_CANDIDATES = [
 ];
 
 export const DNS64_BACKUP_KEY = 'bknetwork.dns64Backup';
+export const TARGET_ADAPTER_KEY = 'bknetwork.targetAdapter';
+
+// Target adapter selection is persisted so a refresh or a restart keeps the
+// user on the adapter they picked. The backend rejects wildcards and virtual
+// adapters, so this only stores an exact adapter name.
+export function readTargetAdapter() {
+  try {
+    const raw = localStorage.getItem(TARGET_ADAPTER_KEY);
+    return typeof raw === 'string' ? raw.trim() : '';
+  } catch (_) {
+    return '';
+  }
+}
+
+export function writeTargetAdapter(name) {
+  const value = typeof name === 'string' ? name.trim() : '';
+  if (!value) return;
+  try {
+    localStorage.setItem(TARGET_ADAPTER_KEY, value);
+  } catch (_) {
+    // 存储不可用时仅保留内存中的选择
+  }
+}
 
 export function readDns64Backups() {
   try {

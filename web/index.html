@@ -151,6 +151,7 @@
           <div class="easy-mode-title">Warp 免流模式</div>
           <div class="easy-mode-desc">开启后切换为仅 v6，并启用 Warp；关闭则恢复双栈并关闭 Warp</div>
           <div class="easy-mode-state" id="easyModeState">当前关闭</div>
+          <div class="easy-mode-target" id="easyTargetAdapter">目标网卡：检测中…</div>
         </div>
         <span class="toggle">
           <input id="easyModeToggle" type="checkbox" />
@@ -198,7 +199,7 @@
               <div class="control-label">目标网卡</div>
               <div class="control-value">
                 <select id="ifName2" class="target-adapter-select">
-                  <option value="WiFi">WiFi</option>
+                  <option value="">自动检测</option>
                 </select>
               </div>
             </div>

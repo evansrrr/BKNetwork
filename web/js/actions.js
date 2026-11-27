@@ -1,6 +1,6 @@
 import { dns64ModeStateEl, dns64ModeToggleEl, dnsIpv4InputEl, dnsIpv6InputEl, easyModeStateEl, easyModeToggleEl, settingsDiagnosticsBtn, warpStateEl, warpToggleEl } from './dom.js';
 import { dns64ModeState, dnsEditorState, fastStatusRefreshState, forgetDns64Backup, pendingToggleState, recallDns64Backup, rememberDns64Backup, settingsState, store } from './state.js';
-import { appendLog, applyOptimisticNetworkState, clearPendingToggle, compareVersions, currentIfName, delay, findLocalIpv6Address, getCurrentVersionText, getDns64Backup, getSelectedAdapter, getStableEasyModeValue, getStableWarpValue, isDns64ModeActive, markPendingToggle, parseDnsServers, pickDns64Resolver, renderStatus, renderTrafficUsage, setAdminBadge, setBusy, setDns64ModeStatus, setDnsStatus, setIpv6CheckStatus, setSettingsOpen, setSettingsStatus, setText, showConfigurationFailure, showConfigurationSuccess, showConfigurationToast, showOperationToast, syncDns64ModeState, syncDnsEditor, syncEasyModeState, syncSettingsControls, updateFreeFlowBadge } from './ui.js';
+import { appendLog, applyOptimisticNetworkState, clearPendingToggle, compareVersions, delay, findLocalIpv6Address, getCurrentVersionText, getDns64Backup, getSelectedAdapter, getStableEasyModeValue, getStableWarpValue, isDns64ModeActive, markPendingToggle, parseDnsServers, pickDns64Resolver, renderStatus, renderTrafficUsage, resolveTargetAdapter, setAdminBadge, setBusy, setDns64ModeStatus, setDnsStatus, setIpv6CheckStatus, setSettingsOpen, setSettingsStatus, setText, showConfigurationFailure, showConfigurationSuccess, showConfigurationToast, showOperationToast, syncDns64ModeState, syncDnsEditor, syncEasyModeState, syncSettingsControls, updateFreeFlowBadge } from './ui.js';
 import { fetchIpv6AddressOnce, fetchLatestReleaseTag, postAction, postActionSilently } from './api.js';
 
 export function stopFastStatusRefresh() {
@@ -530,7 +530,13 @@ export async function checkAdminStatus() {
 }
 
 export async function switchStack(mode) {
-  const ifName = currentIfName();
+  const target = resolveTargetAdapter(store.latestNetwork);
+  if (!target.adapter) {
+    showConfigurationFailure(target.reason);
+    appendLog(`IP 栈切换未执行：${target.reason}`);
+    return;
+  }
+  const ifName = target.name;
   const stackLabel = {
     ipv4: 'IP 栈协议（仅 v4）',
     ipv6: 'IP 栈协议（仅 v6）',
@@ -601,6 +607,14 @@ export async function applyEasyMode(enabled) {
     easyModeToggleEl.checked = getStableEasyModeValue();
     return;
   }
+  const target = resolveTargetAdapter(store.latestNetwork);
+  if (!target.adapter) {
+    easyModeToggleEl.checked = getStableEasyModeValue();
+    showConfigurationFailure(target.reason);
+    appendLog(`免流模式未执行：${target.reason}`);
+    return;
+  }
+  const ifName = target.name;
   showConfigurationToast('免流模式', enabled ? '正在开启Warp免流模式' : '正在关闭Warp免流模式');
   markPendingToggle('easyMode', enabled, enabled ? 'warp.ok' : 'switch.ok');
   easyModeToggleEl.checked = getStableEasyModeValue();
@@ -612,13 +626,13 @@ export async function applyEasyMode(enabled) {
   let succeeded = false;
   try {
     if (enabled) {
-      await postActionSilently('/api/v1/switch', { ifName: currentIfName(), mode: 'ipv6' });
+      await postActionSilently('/api/v1/switch', { ifName, mode: 'ipv6' });
       await postActionSilently('/api/v1/warp', { action: 'start' });
     } else {
       if (pendingToggleState.warp || getStableWarpValue()) {
         await postActionSilently('/api/v1/warp', { action: 'stop' });
       }
-      await postActionSilently('/api/v1/switch', { ifName: currentIfName(), mode: 'both' });
+      await postActionSilently('/api/v1/switch', { ifName, mode: 'both' });
     }
     succeeded = true;
   } catch (err) {
