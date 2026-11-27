@@ -41,14 +41,38 @@ export async function fetchIpv6AddressOnce() {
 
 // 本地快照里已有的全局 IPv6 地址足以判断免流是否可用，不必再问公网回显服务。
 
-export async function postAction(path, body) {
-  setBusy(true);
+// 服务端写操作（switch/dns/warp）自身有 25s 超时，客户端留出余量；
+// 没有超时的话一个挂死的后端命令会让按钮永远处于 busy 状态。
+const POST_TIMEOUT_MS = 30000;
+
+function isAbortError(err) {
+  return err && (err.name === 'AbortError' || err.name === 'TimeoutError');
+}
+
+async function postJson(path, body) {
+  const controller = new AbortController();
+  const timer = window.setTimeout(() => controller.abort(), POST_TIMEOUT_MS);
   try {
-    const res = await fetch(path, {
+    return await fetch(path, {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify(body),
+      signal: controller.signal,
     });
+  } catch (err) {
+    if (isAbortError(err)) {
+      throw new Error('请求超时');
+    }
+    throw err;
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+export async function postAction(path, body) {
+  setBusy(true);
+  try {
+    const res = await postJson(path, body);
     const data = await res.json();
     appendLog(`${path} -> ${data.ok ? 'ok' : 'error'}`);
     if (!res.ok) {
@@ -64,11 +88,7 @@ export async function postAction(path, body) {
 }
 
 export async function postActionSilently(path, body) {
-  const res = await fetch(path, {
-    method: 'POST',
-    headers: { 'content-type': 'application/json' },
-    body: JSON.stringify(body),
-  });
+  const res = await postJson(path, body);
   const data = await res.json();
   appendLog(`${path} -> ${data.ok ? 'ok' : 'error'}`);
   if (!res.ok) {

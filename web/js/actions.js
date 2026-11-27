@@ -402,32 +402,76 @@ export async function checkIpv6Address() {
   return null;
 }
 
-export function startWarpStatusPoll() {
-  const poll = async () => {
-    try {
-      const res = await fetch('/api/v1/warp-status');
-      if (!res.ok) {
-        throw new Error(`HTTP ${res.status}`);
-      }
-      const data = await res.json();
-      store.warpConnected = !!data.connected;
-      store.warpStatusText_ = data.status || '';
-      if (warpToggleEl) {
-        warpToggleEl.checked = store.warpConnected;
-        setText(warpStateEl, store.warpConnected ? '当前：已开启' : store.warpStatusText_);
-      }
-      syncEasyModeState(store.latestNetwork);
-      updateFreeFlowBadge();
-      if (store.warpConnected && store.easyModePendingSuccess) {
-        store.easyModePendingSuccess = false;
-        showConfigurationSuccess();
-      }
-    } catch (err) {
+// WARP 状态轮询：每次轮询都会拉起 warp-cli 子进程，是常驻时最大的开销来源。
+// 页面隐藏（托盘/最小化）时跳过探测，恢复可见时立即补一次；间隔放宽到 10s。
+const WARP_POLL_INTERVAL_MS = 10000;
+const WARP_POLL_TIMEOUT_MS = 8000;
+let warpPollTimerId = null;
+let warpPollInFlight = false;
+let warpVisibilityBound = false;
+
+async function pollWarpStatusOnce() {
+  if (warpPollInFlight) {
+    return;
+  }
+  warpPollInFlight = true;
+  const controller = new AbortController();
+  const timer = window.setTimeout(() => controller.abort(), WARP_POLL_TIMEOUT_MS);
+  try {
+    const res = await fetch('/api/v1/warp-status', { signal: controller.signal, cache: 'no-store' });
+    if (!res.ok) {
+      throw new Error(`HTTP ${res.status}`);
+    }
+    const data = await res.json();
+    store.warpConnected = !!data.connected;
+    store.warpStatusText_ = data.status || '';
+    if (warpToggleEl) {
+      warpToggleEl.checked = store.warpConnected;
+      setText(warpStateEl, store.warpConnected ? '当前：已开启' : store.warpStatusText_);
+    }
+    syncEasyModeState(store.latestNetwork);
+    updateFreeFlowBadge();
+    if (store.warpConnected && store.easyModePendingSuccess) {
+      store.easyModePendingSuccess = false;
+      showConfigurationSuccess();
+    }
+  } catch (err) {
+    if (err && (err.name === 'AbortError' || err.name === 'TimeoutError')) {
+      appendLog('WARP 状态查询超时');
+    } else {
       console.error('WARP 状态轮询失败:', err);
     }
-    setTimeout(poll, 3000);
+  } finally {
+    clearTimeout(timer);
+    warpPollInFlight = false;
+  }
+}
+
+export function startWarpStatusPoll() {
+  if (warpPollTimerId !== null) {
+    clearTimeout(warpPollTimerId);
+  }
+  if (!warpVisibilityBound) {
+    warpVisibilityBound = true;
+    document.addEventListener('visibilitychange', () => {
+      if (!document.hidden) {
+        pollWarpStatusOnce();
+      }
+    });
+  }
+  const scheduleNext = () => {
+    warpPollTimerId = setTimeout(() => {
+      // document.hidden 时跳过探测但仍保持节拍，恢复可见的第一拍立即刷新。
+      if (!document.hidden) {
+        pollWarpStatusOnce();
+      }
+      scheduleNext();
+    }, WARP_POLL_INTERVAL_MS);
   };
-  setTimeout(poll, 1000);
+  if (!document.hidden) {
+    pollWarpStatusOnce();
+  }
+  scheduleNext();
 }
 
 export function loadTrafficUsage() {
@@ -496,17 +540,48 @@ export function refreshTrafficUsage() {
     .catch(err => console.error('操作失败:', err));
 }
 
-export async function refreshStatus(force = false) {
+// 一次只允许一个 /status 请求在飞：轮询间隔短于响应时间时，重叠请求只会
+// 互相制造竞态（旧响应覆盖新状态）。force 请求不被丢弃，排队到当前请求后。
+const STATUS_REFRESH_TIMEOUT_MS = 15000;
+let statusRefreshInFlight = false;
+let statusRefreshQueued = false;
+
+async function fetchStatusOnce(force) {
+  const controller = new AbortController();
+  const timer = window.setTimeout(() => controller.abort(), STATUS_REFRESH_TIMEOUT_MS);
   try {
-    const res = await fetch('/api/v1/status');
+    const res = await fetch('/api/v1/status', { signal: controller.signal, cache: 'no-store' });
     if (!res.ok) {
       throw new Error(`HTTP ${res.status}`);
     }
     const data = await res.json();
     renderStatus(data, force);
     appendLog('状态已刷新');
-  } catch (err) {
-    appendLog(`状态刷新失败：${err.message}`);
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+export async function refreshStatus(force = false) {
+  if (statusRefreshInFlight) {
+    if (force) {
+      statusRefreshQueued = true;
+    }
+    return;
+  }
+  statusRefreshInFlight = true;
+  try {
+    await fetchStatusOnce(force).catch((err) => {
+      appendLog(`状态刷新失败：${err.message}`);
+    });
+    while (statusRefreshQueued) {
+      statusRefreshQueued = false;
+      await fetchStatusOnce(true).catch((err) => {
+        appendLog(`状态刷新失败：${err.message}`);
+      });
+    }
+  } finally {
+    statusRefreshInFlight = false;
   }
 }
 
